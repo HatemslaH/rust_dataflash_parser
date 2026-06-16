@@ -66,11 +66,34 @@ def measure_rss_during(cmd: list[str]) -> tuple[float, dict | None, int, str]:
 
 
 def parse_json_line(stdout: str) -> dict:
-    for line in reversed(stdout.splitlines()):
+    text = stdout.strip()
+    if text.startswith("{"):
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+    for line in reversed(text.splitlines()):
         line = line.strip()
         if line.startswith("{"):
-            return json.loads(line)
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                continue
     return {}
+
+
+def normalize_rust_stats(data: dict) -> dict:
+    """Map v0.2 LogExport JSON to legacy benchmark fields."""
+    stats = data.get("stats")
+    if not stats:
+        return data
+    return {
+        "file_size": data.get("metadata", {}).get("file_size"),
+        "messages": stats.get("message_count"),
+        "fields": stats.get("field_count"),
+        "values": stats.get("value_count"),
+        "estimated_bytes": stats.get("estimated_bytes"),
+    }
 
 
 def benchmark_file(path: Path, rust_bin: Path, *, run_js: bool, run_rust: bool) -> dict:
@@ -81,11 +104,12 @@ def benchmark_file(path: Path, rust_bin: Path, *, run_js: bool, run_rust: bool) 
         js_wall, js_mem, js_code, js_out = measure_rss_during(["node", str(JS_SCRIPT), str(path)])
     if run_rust:
         rust_wall, rust_mem, rust_code, rust_out = measure_rss_during(
-            [str(rust_bin), str(path), "--json"]
+            [str(rust_bin), str(path), "--format", "json"]
         )
 
     js = parse_json_line(js_out) if run_js and js_code == 0 else ({"error": js_out} if run_js else {})
-    rust = parse_json_line(rust_out) if run_rust and rust_code == 0 else ({"error": rust_out} if run_rust else {})
+    rust_raw = parse_json_line(rust_out) if run_rust and rust_code == 0 else ({"error": rust_out} if run_rust else {})
+    rust = normalize_rust_stats(rust_raw) if run_rust and rust_code == 0 else rust_raw
 
     speedup = None
     if run_js and run_rust and js_code == 0 and rust_code == 0 and rust_wall > 0:

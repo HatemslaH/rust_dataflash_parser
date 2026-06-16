@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v0.2.0]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download sample logs
+        run: python download_dataflash_logs.py --limit 5
+
+      - run: cargo test --test integration
+      - run: cargo test --test js_parity
+
+  fuzz-smoke:
+    name: Fuzz smoke (nightly)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Fuzz parse_type
+        run: cargo +nightly fuzz run parse_type -- -runs=1000
+
+      - name: Fuzz df_scan
+        run: cargo +nightly fuzz run df_scan -- -runs=1000

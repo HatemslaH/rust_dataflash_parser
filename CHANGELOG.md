@@ -5,6 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-16
+
+### Added
+
+- `LogSession` API: `open` (mmap), `from_bytes`, `index`, `load_message_type`, `load_messages`, `extract_start_time`
+- Two-phase parsing: index headers first, load message payloads on demand
+- JSON export via serde (`schema_version: 1`, base64 `files` section)
+- `LogMetadata` on `ParseResult` (`start_time`, `file_size`, `message_type_count`)
+- `extract_start_time` and GPS leap-second helpers (`src/time.rs`)
+- Full CLI on clap: `--format`, `--output`, `--messages`, `--list-types`, `--parallel`, `--no-metadata`
+- Parallel message-type parsing via rayon (`parallel` feature, default on)
+- Integration and JS parity tests; offline `tests/fixtures/minimal.bin`
+- CI workflow (`fmt`, `clippy`, `test`, integration, fuzz smoke)
+- Fuzz targets `parse_type` and `df_scan`
+- MIT license for Rust code
+
+### Changed
+
+- `populate_units` errors are propagated instead of ignored
+- `get` / `get_instance` return `Result<FieldArray>` with `FieldParseError` on decode failures
+- `ParseResult` includes `metadata`, `files`, and `fmt_stats`
+- CLI: `--json` replaced by `--format json`
+
+### Deprecated
+
+- `DataflashParser::process_data` — use `LogSession` instead
+
+[0.2.0]: https://github.com/HatemslaH/rust_dataflash_parser/releases/tag/v0.2.0
+[0.1.0]: https://github.com/HatemslaH/rust_dataflash_parser/releases/tag/v0.1.0
+
 ## [0.1.0] - 2026-06-16
 
 ### Added
@@ -16,5 +46,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `benchmark_parsers.py` — compare JS vs Rust parse time and memory (`--js-only`, `--rust-only`, `--min-kb`, `--max-kb`)
 - `JsDataflashParser` included as a git submodule for benchmarks and reference
 - Cross-platform release binaries (Linux, Windows, macOS)
-
-[0.1.0]: https://github.com/HatemslaH/rust_dataflash_parser/releases/tag/v0.1.0

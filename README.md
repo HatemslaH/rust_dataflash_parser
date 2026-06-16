@@ -1,6 +1,6 @@
 # rust_dataflash_parser
 
-A fast, idiomatic Rust port of [JsDataflashParser](JsDataflashParser/) for parsing ArduPilot **dataflash** binary logs (`.BIN` files). The parsing logic mirrors the JavaScript implementation: FMT discovery, field decoding, instance splitting, MODE text mapping, and FILE payload reassembly.
+A fast, idiomatic Rust port of [JsDataflashParser](JsDataflashParser/) for parsing ArduPilot **dataflash** binary logs (`.BIN` files). The parsing logic mirrors the JavaScript implementation: FMT discovery, field decoding, instance splitting, MODE text mapping, FILE payload reassembly, and GPS start-time extraction.
 
 This repository also includes tooling to download autotest logs, benchmark JS vs Rust parsers, and compare parse time and memory usage.
 
@@ -41,42 +41,62 @@ Pre-built binaries for Linux, Windows, and macOS are available on the [Releases]
 # Build the release binary
 cargo build --release
 
-# Parse a single log
+# Parse a single log (summary output)
 ./target/release/rust_dataflash_parser path/to/log.BIN
 
-# Machine-readable output (used by the benchmark script)
-./target/release/rust_dataflash_parser path/to/log.BIN --json
+# JSON export (schema_version 1)
+./target/release/rust_dataflash_parser path/to/log.BIN --format json
+
+# List available message types after indexing
+./target/release/rust_dataflash_parser path/to/log.BIN --list-types
+
+# Parse selected types in parallel
+./target/release/rust_dataflash_parser path/to/log.BIN --messages GPS,ATT --parallel
 ```
 
 On Windows the binary is `target\release\rust_dataflash_parser.exe`.
 
 ## Library usage
 
+### LogSession (recommended)
+
+```rust
+use rust_dataflash_parser::{LogSession, Parallelism};
+
+let mut session = LogSession::open("log.BIN")?;
+session.index()?;
+session.load_message_type("GPS")?;
+session.extract_start_time()?;
+let result = session.snapshot();
+
+println!("messages: {}", result.stats.message_count);
+println!("values: {}", result.stats.value_count);
+if let Some(start) = result.metadata.start_time {
+    println!("start: {}", start.to_rfc3339());
+}
+
+// JSON export
+let json = result.to_json_pretty()?;
+```
+
+For large logs, index first and load only the types you need:
+
+```rust
+session.index()?;
+session.load_messages(&["GPS".into(), "ATT".into()], Parallelism::Parallel)?;
+```
+
+### Legacy API
+
 ```rust
 use rust_dataflash_parser::DataflashParser;
 
 let mut parser = DataflashParser::new();
 let data = std::fs::read("log.BIN")?;
-let result = parser.process_data(data, None)?; // None = default message list
-
-// Parsed message groups keyed by name (with instance suffix when applicable)
-let _messages = &result.messages;
-
-// Metadata: units, multipliers, instance fields
-let _types = &result.message_types;
-
-// Aggregate stats
-println!("messages: {}", result.stats.message_count);
-println!("values: {}", result.stats.value_count);
-
-// After parsing
-let _files = parser.files();   // reconstructed FILE log payloads
-let _stats = parser.stats();   // per-message-type byte statistics
+let result = parser.process_data(data, None)?; // deprecated; use LogSession
 ```
 
 Default parsed message types (same as JS): `CMD`, `MSG`, `FILE`, `MODE`, `AHR2`, `ATT`, `GPS`, `POS`, `XKQ1`, `XKQ`, `NKQ1`, `NKQ2`, `XKQ2`, `PARM`, `STAT`, `EV`.
-
-Pass a custom slice to `process_data(data, Some(&["GPS", "ATT"]))` to parse only selected types.
 
 ## Download autotest logs
 
@@ -127,15 +147,23 @@ The JS harness is `benchmark_js.mjs`; it loads `JsDataflashParser/parser.js` dir
 
 ```
 rust_dataflash_parser/
-├── JsDataflashParser/       # Git submodule — original JavaScript parser
+├── JsDataflashParser/       # Git submodule — original JavaScript parser (GPL-3.0)
 ├── src/
 │   ├── lib.rs               # Library root
 │   ├── main.rs              # CLI binary
-│   ├── parser.rs            # Core parser (port of parser.js)
+│   ├── session.rs           # LogSession API
+│   ├── parser.rs            # Core parser engine
+│   ├── time.rs              # GPS start time + leap seconds
+│   ├── export/json.rs       # JSON serialization
 │   ├── format.rs            # Binary field types and decoding
 │   ├── types.rs             # Data structures
 │   ├── mode.rs              # MAV mode maps and units
 │   └── error.rs             # ParseError
+├── tests/
+│   ├── integration.rs
+│   ├── js_parity.rs
+│   └── fixtures/minimal.bin
+├── fuzz/                    # cargo-fuzz targets (nightly)
 ├── download_dataflash_logs.py
 ├── benchmark_parsers.py
 ├── benchmark_js.mjs
@@ -146,19 +174,18 @@ rust_dataflash_parser/
 
 ```bash
 cargo fmt
-cargo check
+cargo clippy -- -D warnings
 cargo test
 cargo build --release
 ```
 
 ## Differences from JsDataflashParser
 
-The Rust port focuses on core parsing. Browser-only or metadata helpers from the JS version are not implemented:
+Browser-only features from the JS version are not implemented:
 
-- `extractStartTime`, leap-second helpers
 - `trimFile`, Web Worker progress callbacks (`postMessage`)
 
-Parsing semantics for the default message set match the JS parser; the benchmark script checks that message counts agree.
+Parsing semantics for the default message set match the JS parser; integration tests compare message, field, and value counts.
 
 ## Changelog
 
@@ -166,4 +193,6 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-Follow the license of the upstream ArduPilot / JsDataflashParser components where applicable.
+Rust code in this repository is licensed under the [MIT License](LICENSE).
+
+The [JsDataflashParser](JsDataflashParser/) git submodule is licensed under [GPL-3.0](JsDataflashParser/LICENSE) (upstream).
