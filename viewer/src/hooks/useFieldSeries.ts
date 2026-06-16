@@ -94,10 +94,6 @@ export function usePlotSeriesData(activePlots: ActivePlot[]): PlotSeriesData[] {
     return map;
   }, [uniqueRequests, queries]);
 
-  const querySignature = queries
-    .map((q) => `${q.dataUpdatedAt}:${q.status}:${q.fetchStatus}`)
-    .join("|");
-
   return useMemo(() => {
     return plotRequests.map(({ plot, timeReq, valueReq }) => {
       const timeResult = resultsByKey.get(fieldRequestCacheKey(timeReq));
@@ -117,7 +113,7 @@ export function usePlotSeriesData(activePlots: ActivePlot[]): PlotSeriesData[] {
         errorMessage: errors.length > 0 ? errors.join("; ") : null,
       };
     });
-  }, [plotRequests, querySignature, resultsByKey]);
+  }, [plotRequests, resultsByKey]);
 }
 
 export function useGpsTrajectory(enabled: boolean) {

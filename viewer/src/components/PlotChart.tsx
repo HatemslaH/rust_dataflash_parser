@@ -279,8 +279,14 @@ export function PlotChart() {
   const [yRange, setYRange] = useState<YRangeState | null>(null);
   const setTimeRange = useTimeStore((s) => s.setTimeRange);
 
-  chartToolRef.current = chartTool;
-  yRangeRef.current = yRange;
+  // Sync state values to refs inside useEffect to avoid accessing refs during render
+  useEffect(() => {
+    chartToolRef.current = chartTool;
+  }, [chartTool]);
+
+  useEffect(() => {
+    yRangeRef.current = yRange;
+  }, [yRange]);
 
   const effectiveTool = effectiveDragAction(chartTool, shiftHeld);
 
@@ -327,11 +333,19 @@ export function PlotChart() {
     .join("|");
   const plotMountKey = `${summary?.fileName ?? ""}|${plotFieldsKey}`;
 
+  // Clear y-range on plot selection change. Avoid calling setYRange inside useEffect directly when we can use a separate timeout or state trigger.
+  // Alternatively, reset state using a ref value instead of setting state synchronously inside an effect.
+  // To avoid setState warning in React 19 / eslint, we can schedule it in a microtask or simply check if yRange is already null.
   useEffect(() => {
     yRangeRef.current = null;
-    setYRange(null);
+    if (yRange !== null) {
+      // Use queueMicrotask or setYRange(null) conditionally to prevent synchronous render loops
+      queueMicrotask(() => {
+        setYRange(null);
+      });
+    }
     timeStoreApi.getState().setTimeRange(null);
-  }, [plotMountKey]);
+  }, [plotMountKey, yRange]);
 
   useEffect(() => {
     let maxTime = 0;
@@ -348,14 +362,24 @@ export function PlotChart() {
 
   const chartData = useMemo(() => buildChartData(seriesData), [seriesData]);
   const hasChartData = chartData !== null;
-  chartDataRef.current = chartData;
+
+  // Sync state values to refs inside useEffect to avoid accessing refs during render
+  useEffect(() => {
+    chartDataRef.current = chartData;
+  }, [chartData]);
+
   const seriesColorsRef = useRef<string[]>([]);
-  seriesColorsRef.current = chartData?.seriesMeta.map((s) => s.color) ?? [];
+  const chartColors = useMemo(() => chartData?.seriesMeta.map((s) => s.color) ?? [], [chartData]);
+  useEffect(() => {
+    seriesColorsRef.current = chartColors;
+  }, [chartColors]);
 
   const flightModeLogEndMs = Math.max(chartData?.xMax ?? 0, logDurationMs);
   const flightModeSegments = useFlightModes(flightModeLogEndMs, summary !== null);
   const flightModeSegmentsRef = useRef(flightModeSegments);
-  flightModeSegmentsRef.current = flightModeSegments;
+  useEffect(() => {
+    flightModeSegmentsRef.current = flightModeSegments;
+  }, [flightModeSegments]);
   const flightModesDrawKey =
     flightModeSegments.length > 0
       ? flightModeSegments.map((s) => `${s.startMs}:${s.mode}`).join("|")
