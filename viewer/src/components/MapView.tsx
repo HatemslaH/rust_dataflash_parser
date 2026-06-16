@@ -107,6 +107,18 @@ export function MapView() {
   }, [summary]);
 
   useEffect(() => {
+    const container = containerRef.current;
+    const map = mapRef.current;
+    if (!container || !map) return;
+
+    const ro = new ResizeObserver(() => {
+      map.resize();
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [summary, isLoading, isError, lats]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !lats || !lngs || lats.length === 0) return;
 

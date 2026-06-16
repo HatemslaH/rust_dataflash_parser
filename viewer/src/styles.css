@@ -19,6 +19,38 @@ body,
   min-height: 180px;
 }
 
+.panel-splitter {
+  flex-shrink: 0;
+  height: 6px;
+  cursor: row-resize;
+  background: var(--mantine-color-default-border);
+  transition: background-color 150ms ease;
+  touch-action: none;
+}
+
+.panel-splitter:hover,
+.panel-splitter:focus-visible {
+  background: var(--mantine-color-orange-6);
+  outline: none;
+}
+
+.panel-splitter::after {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 2px;
+  margin: 2px auto 0;
+  border-radius: 999px;
+  background: var(--mantine-color-dimmed);
+  opacity: 0.6;
+}
+
+.panel-splitter:hover::after,
+.panel-splitter:focus-visible::after {
+  opacity: 1;
+  background: var(--mantine-color-white);
+}
+
 .attitude-body {
   padding: 10px;
 }

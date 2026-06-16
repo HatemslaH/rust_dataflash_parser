@@ -28,6 +28,7 @@ import { MorePanel } from "./MorePanel";
 import { PlotChart } from "./PlotChart";
 import { MapView } from "./MapView";
 import { AttitudeWidget } from "./AttitudeWidget";
+import { PanelSplitter } from "./PanelSplitter";
 import { useSessionStore } from "../stores/sessionStore";
 import { getParserBackend } from "../platform";
 import { resetViewerData } from "../lib/sessionReset";
@@ -67,14 +68,24 @@ export function AppShell() {
     setColorScheme(computedColorScheme === "dark" ? "light" : "dark");
   };
 
-  const plotFlex = showMap ? 1 : 1;
-  const mapFlex = showPlot ? 1 : 1;
+  const plotPanel = (
+    <Box style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <PlotChart />
+    </Box>
+  );
+
+  const mapPanel = (
+    <Box style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <MapView />
+    </Box>
+  );
 
   return (
     <>
       <AttitudeWidget />
 
       <MantineAppShell
+        transitionDuration={0}
         navbar={{
           width: sidebarCollapsed ? 56 : 280,
           breakpoint: "sm",
@@ -126,11 +137,13 @@ export function AppShell() {
               />
             )}
 
-            <Box style={{ flex: 1, overflow: "auto", minHeight: 0, display: sidebarCollapsed ? "none" : undefined }}>
-              {!processDone && <FileOpenPanel onLogOpened={onLogOpened} />}
-              {processDone && tab === "plot" && <MessageTree />}
-              {processDone && tab === "more" && <MorePanel />}
-            </Box>
+            {!sidebarCollapsed && (
+              <Box style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+                {!processDone && <FileOpenPanel onLogOpened={onLogOpened} />}
+                {processDone && tab === "plot" && <MessageTree />}
+                {processDone && tab === "more" && <MorePanel />}
+              </Box>
+            )}
 
             <Group gap={6} justify="flex-end" mt="auto">
               <ActionIcon variant="default" onClick={toggleTheme}>
@@ -155,16 +168,9 @@ export function AppShell() {
 
         <MantineAppShell.Main>
           <Stack gap={0} h="100vh">
-            {showPlot && (
-              <Box style={{ flex: plotFlex, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                <PlotChart />
-              </Box>
-            )}
-            {showMap && (
-              <Box style={{ flex: mapFlex, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                <MapView />
-              </Box>
-            )}
+            {showPlot && showMap && <PanelSplitter top={plotPanel} bottom={mapPanel} />}
+            {showPlot && !showMap && plotPanel}
+            {!showPlot && showMap && mapPanel}
             {!showPlot && !showMap && (
               <Center flex={1} p="xl">
                 <Stack align="center" gap="xs">
