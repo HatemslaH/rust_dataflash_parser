@@ -45,7 +45,8 @@ export function createWasmParserBackend(platform: "web" | "desktop"): ParserBack
       if (typeof source === "string") {
         fileName = source.split(/[/\\]/).pop() || source;
         emit({ phase: "indexing", percent: 5, message: "Fetching sample log…" });
-        const response = await fetch(`/${fileName}`);
+        const baseUrl = import.meta.env.BASE_URL;
+        const response = await fetch(`${baseUrl}${fileName}`);
         if (!response.ok) {
           throw new Error(`Failed to load ${fileName}: ${response.status}`);
         }
