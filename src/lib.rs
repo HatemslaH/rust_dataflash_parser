@@ -5,22 +5,35 @@
 //! FMT discovery, binary field decoding, instance splitting, MODE text mapping,
 //! and FILE payload reassembly.
 //!
-//! ## Two-phase parsing
+//! # API documentation
+//!
+//! Full rustdoc: <https://docs.rs/rust_dataflash_parser/latest/rust_dataflash_parser/>
+//!
+//! # Two-phase parsing
 //!
 //! For large logs, use [`LogSession`] to index the file first (scan headers only),
 //! then load message types on demand:
 //!
 //! ```no_run
-//! use rust_dataflash_parser::{LogSession, Parallelism};
+//! use rust_dataflash_parser::{LogSession, Parallelism, DEFAULT_MESSAGES};
 //!
 //! let mut session = LogSession::open("log.BIN")?;
 //! session.index()?;
-//! session.load_message_type("GPS")?;
-//! let result = session.snapshot();
+//! session.load_messages(
+//!     &DEFAULT_MESSAGES.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+//!     Parallelism::Sequential,
+//! )?;
+//! session.extract_start_time()?;
+//! let result = session.into_result();
 //! # Ok::<(), rust_dataflash_parser::ParseError>(())
 //! ```
 //!
-//! ## Legacy API
+//! # JSON export
+//!
+//! [`ParseResult::to_json_pretty`] produces a versioned JSON document suitable for UI
+//! consumers (`schema_version: 1`).
+//!
+//! # Legacy API
 //!
 //! [`DataflashParser::process_data`] performs a full parse in one call (deprecated).
 

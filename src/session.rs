@@ -11,16 +11,21 @@ use crate::parser::DataflashParser;
 use crate::time::extract_start_time;
 use crate::types::{FieldArray, LogMetadata, ParseResult};
 
-/// Controls whether `load_messages` parses types sequentially or in parallel.
+/// Controls whether [`LogSession::load_messages`] parses types sequentially or in parallel.
+///
+/// Parallel parsing requires the `parallel` feature (enabled by default).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Parallelism {
+    /// Parse message types one after another (default).
     #[default]
     Sequential,
+    /// Parse independent message types concurrently via rayon.
     #[cfg(feature = "parallel")]
     Parallel,
 }
 
 impl Parallelism {
+    /// Returns `true` when parallel parsing is requested and the `parallel` feature is enabled.
     pub fn is_parallel(self) -> bool {
         #[cfg(feature = "parallel")]
         {
@@ -35,8 +40,15 @@ impl Parallelism {
 
 /// High-level session API for indexing and loading ArduPilot dataflash logs.
 ///
-/// For large logs (50+ MB), call `index()` then load only the message types you need
-/// via `load_message_type` or `load_messages`.
+/// Typical workflow:
+///
+/// 1. [`LogSession::open`] or [`LogSession::from_bytes`]
+/// 2. [`LogSession::index`] — scan headers, build schema (no payload decode)
+/// 3. [`LogSession::load_message_type`] or [`LogSession::load_messages`]
+/// 4. Optional [`LogSession::extract_start_time`]
+/// 5. [`LogSession::into_result`] or [`LogSession::snapshot`]
+///
+/// For large logs (50+ MB), index first and load only the types you need.
 pub struct LogSession {
     _mmap: Option<Mmap>,
     parser: DataflashParser,
@@ -227,6 +239,7 @@ impl LogSession {
         self.snapshot()
     }
 
+    /// Access the underlying [`DataflashParser`] (e.g. for low-level inspection).
     pub fn parser(&self) -> &DataflashParser {
         &self.parser
     }

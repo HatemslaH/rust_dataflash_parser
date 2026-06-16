@@ -1,6 +1,12 @@
+//! Binary field decoding for ArduPilot dataflash format characters.
+//!
+//! Each character in a FMT format string maps to a fixed-size type. See
+//! [`parse_type_at`] for the main decode entry point.
+
 use crate::error::{ParseError, Result};
 use crate::types::FieldArray;
 
+/// Return the payload size in bytes for a dataflash format character.
 pub fn get_size_of(type_char: char) -> Option<usize> {
     match type_char {
         'b' | 'B' | 'M' => Some(1),
