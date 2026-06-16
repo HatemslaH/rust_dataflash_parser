@@ -133,11 +133,9 @@ export function AppShell() {
             </Box>
 
             <Group gap={6} justify="flex-end" mt="auto">
-              <Tooltip label={`Switch to ${computedColorScheme === "dark" ? "light" : "dark"} theme`}>
-                <ActionIcon variant="default" onClick={toggleTheme}>
-                  {computedColorScheme === "dark" ? <IconSun size={16} /> : <IconMoon size={16} />}
-                </ActionIcon>
-              </Tooltip>
+              <ActionIcon variant="default" onClick={toggleTheme}>
+                {computedColorScheme === "dark" ? <IconSun size={16} /> : <IconMoon size={16} />}
+              </ActionIcon>
               {summary && (
                 <Tooltip label="Close current log">
                   <ActionIcon variant="default" onClick={() => void handleCloseLog()}>
@@ -145,14 +143,12 @@ export function AppShell() {
                   </ActionIcon>
                 </Tooltip>
               )}
-              <Tooltip label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
-                <ActionIcon
-                  variant="default"
-                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                >
-                  {sidebarCollapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
-                </ActionIcon>
-              </Tooltip>
+              <ActionIcon
+                variant="default"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              >
+                {sidebarCollapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
+              </ActionIcon>
             </Group>
           </Stack>
         </MantineAppShell.Navbar>
