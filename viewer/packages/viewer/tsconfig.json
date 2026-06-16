@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@dfv/viewer/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}
