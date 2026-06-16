@@ -1,9 +1,9 @@
-import { useEffect, useRef } from "react";
-import maplibregl from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
-import * as THREE from "three";
 import * as MTP from "@dvt3d/maplibre-three-plugin";
 import { Center, Stack, Text } from "@mantine/core";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { useEffect, useRef } from "react";
+import * as THREE from "three";
 import { useGpsTrajectory } from "../hooks/useFieldSeries";
 import { useSessionStore } from "../stores/sessionStore";
 import { useTimeStore } from "../stores/timeStore";

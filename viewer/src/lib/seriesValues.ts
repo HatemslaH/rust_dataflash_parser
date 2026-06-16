@@ -2,6 +2,15 @@ import type { FieldSeries } from "../platform/types";
 
 export const TIME_FIELD = "TimeUS";
 
+/** ArduPilot stores Lat/Lng as degrees × 1e7. */
+export const GPS_COORD_SCALE = 1e-7;
+
+export function gpsCoordToDegrees(values: number[]): number[] {
+  if (values.length === 0) return values;
+  const needsScale = values.some((v) => Math.abs(v) > 180);
+  return needsScale ? values.map((v) => v * GPS_COORD_SCALE) : values;
+}
+
 export function timeUsToBootMs(values: number[]): number[] {
   return values.map((t) => t / 1000);
 }
@@ -20,6 +29,12 @@ export function toNumberArray(values: unknown): number[] | null {
 export function parseNumericSeries(series: FieldSeries | undefined): number[] | null {
   if (!series || series.type !== "numeric") return null;
   return toNumberArray(series.values);
+}
+
+export function parseGpsCoordSeries(series: FieldSeries | undefined): number[] | null {
+  const raw = parseNumericSeries(series);
+  if (!raw) return null;
+  return gpsCoordToDegrees(raw);
 }
 
 export function parseTimeSeriesMs(series: FieldSeries | undefined): number[] | null {

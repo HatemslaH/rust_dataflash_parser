@@ -3,7 +3,14 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getParserBackend } from "../platform";
 import type { FieldRequest, FieldSeries } from "../platform/types";
 import { fieldSeriesQueryKey, formatTypeName } from "../lib/fieldSeriesKey";
-import { TIME_FIELD, parseNumericSeries, parseTimeSeriesMs } from "../lib/seriesValues";
+import { resolveGpsSource } from "../lib/gpsSource";
+import {
+  TIME_FIELD,
+  parseGpsCoordSeries,
+  parseNumericSeries,
+  parseTimeSeriesMs,
+} from "../lib/seriesValues";
+import { useSessionStore } from "../stores/sessionStore";
 import type { ActivePlot } from "../stores/plotStore";
 
 async function fetchFieldSeries(request: FieldRequest): Promise<FieldSeries> {
@@ -98,29 +105,52 @@ export function usePlotSeriesData(activePlots: ActivePlot[]): PlotSeriesData[] {
 }
 
 export function useGpsTrajectory(enabled: boolean) {
-  const lat = useFieldSeries(
-    enabled ? { messageType: "GPS", field: "Lat" } : null,
-    enabled,
-  );
-  const lng = useFieldSeries(
-    enabled ? { messageType: "GPS", field: "Lng" } : null,
-    enabled,
-  );
-  const time = useFieldSeries(
-    enabled ? { messageType: "GPS", field: TIME_FIELD } : null,
-    enabled,
+  const summary = useSessionStore((s) => s.summary);
+  const backend = getParserBackend();
+
+  const typesQuery = useQuery({
+    queryKey: ["messageTypes", summary?.fileName ?? ""],
+    queryFn: () => backend.listMessageTypes(),
+    enabled: enabled && summary !== null,
+    staleTime: Infinity,
+  });
+
+  const gpsSource = useMemo(
+    () => (typesQuery.data ? resolveGpsSource(typesQuery.data) : null),
+    [typesQuery.data],
   );
 
-  const lats = parseNumericSeries(lat.data);
-  const lngs = parseNumericSeries(lng.data);
+  const gpsEnabled = enabled && gpsSource !== null;
+  const gpsBase = gpsSource
+    ? { messageType: gpsSource.messageType, instance: gpsSource.instance }
+    : null;
+
+  const lat = useFieldSeries(
+    gpsEnabled && gpsBase ? { ...gpsBase, field: "Lat" } : null,
+    gpsEnabled,
+  );
+  const lng = useFieldSeries(
+    gpsEnabled && gpsBase ? { ...gpsBase, field: "Lng" } : null,
+    gpsEnabled,
+  );
+  const time = useFieldSeries(
+    gpsEnabled && gpsBase ? { ...gpsBase, field: TIME_FIELD } : null,
+    gpsEnabled,
+  );
+
+  const lats = parseGpsCoordSeries(lat.data);
+  const lngs = parseGpsCoordSeries(lng.data);
   const timeMs = parseTimeSeriesMs(time.data);
 
   return {
     lats,
     lngs,
     timeMs,
-    isLoading: lat.isLoading || lng.isLoading || time.isLoading,
-    isError: lat.isError || lng.isError || time.isError,
+    isLoading:
+      typesQuery.isLoading || lat.isLoading || lng.isLoading || time.isLoading,
+    isError:
+      typesQuery.isError ||
+      (gpsEnabled && (lat.isError || lng.isError || time.isError)),
   };
 }
 
