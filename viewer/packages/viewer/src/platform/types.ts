@@ -20,18 +20,18 @@ export interface MessageTypeEntry {
 }
 
 export interface LogSummary {
-  file_name: string;
-  file_size: number;
-  message_type_count: number;
-  available_types: string[];
-  fmt_stats: Record<string, FmtStat>;
-  start_time?: string;
+  fileName: string;
+  fileSize: number;
+  messageTypeCount: number;
+  availableTypes: string[];
+  fmtStats: Record<string, FmtStat>;
+  startTime?: string;
 }
 
 export interface LogMetadata {
-  start_time?: string;
-  file_size: number;
-  message_type_count: number;
+  startTime?: string;
+  fileSize: number;
+  messageTypeCount: number;
 }
 
 export interface FieldSeries {

@@ -48,7 +48,7 @@ describe("Platform Backends", () => {
 
     it("should call open_log when openFile is called with a string", async () => {
       const backend = createDesktopParserBackend();
-      mockInvoke.mockResolvedValue({ file_name: "test.bin" });
+      mockInvoke.mockResolvedValue({ fileName: "test.bin" });
       
       await backend.openFile("test.bin");
       expect(mockInvoke).toHaveBeenLastCalledWith("open_log", { path: "test.bin" }, undefined);
@@ -56,7 +56,7 @@ describe("Platform Backends", () => {
 
     it("should call open_bytes when openFile is called with a File", async () => {
       const backend = createDesktopParserBackend();
-      mockInvoke.mockResolvedValue({ file_name: "uploaded.bin" });
+      mockInvoke.mockResolvedValue({ fileName: "uploaded.bin" });
       
       const file = new File([new Uint8Array([1, 2, 3])], "test.bin");
       await backend.openFile(file);

@@ -71,11 +71,11 @@ export function createMockParserBackend(platform: "web" | "desktop"): ParserBack
       emit({ phase: "ready", percent: 100, message: "Ready" });
 
       summary = {
-        file_name: fileName,
-        file_size: fileSize,
-        message_type_count: MOCK_TYPES.length,
-        available_types: MOCK_TYPES.map((t) => t.name),
-        fmt_stats: Object.fromEntries(
+        fileName: fileName,
+        fileSize: fileSize,
+        messageTypeCount: MOCK_TYPES.length,
+        availableTypes: MOCK_TYPES.map((t) => t.name),
+        fmtStats: Object.fromEntries(
           MOCK_TYPES.map((t) => [t.name, { count: t.count, msg_size: 32, size: t.count * 32 }]),
         ),
       };
@@ -144,8 +144,8 @@ export function createMockParserBackend(platform: "web" | "desktop"): ParserBack
         throw new Error("No log open");
       }
       return {
-        file_size: summary.file_size,
-        message_type_count: summary.message_type_count,
+        fileSize: summary.fileSize,
+        messageTypeCount: summary.messageTypeCount,
       };
     },
 
