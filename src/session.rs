@@ -122,18 +122,36 @@ impl LogSession {
 
     /// Load multiple message types, optionally in parallel (rayon feature).
     pub fn load_messages(&mut self, names: &[String], parallelism: Parallelism) -> Result<()> {
+        let names = Self::expand_names_for_mode(names);
+
         if parallelism.is_parallel() {
             #[cfg(feature = "parallel")]
             {
-                self.load_messages_parallel(names)?;
+                self.load_messages_parallel(&names)?;
                 return Ok(());
             }
         }
 
-        for name in names {
+        for name in &names {
             self.load_message_type(name)?;
         }
         Ok(())
+    }
+
+    fn expand_names_for_mode(names: &[String]) -> Vec<String> {
+        let needs_msg = names
+            .iter()
+            .any(|n| n.split('[').next().unwrap_or(n) == "MODE")
+            && !names
+                .iter()
+                .any(|n| n.split('[').next().unwrap_or(n) == "MSG");
+        if needs_msg {
+            let mut expanded = vec!["MSG".to_string()];
+            expanded.extend(names.iter().cloned());
+            expanded
+        } else {
+            names.to_vec()
+        }
     }
 
     #[cfg(feature = "parallel")]
@@ -185,7 +203,7 @@ impl LogSession {
             self.parser.messages_mut().insert(name, fields);
         }
 
-        self.apply_mode_as_text();
+        self.parser.recompute_mode_as_text();
 
         if names
             .iter()
@@ -195,29 +213,6 @@ impl LogSession {
         }
 
         Ok(())
-    }
-
-    fn apply_mode_as_text(&mut self) {
-        if let Some(mode_fields) = self.parser.messages_mut().get("MODE").cloned()
-            && let Some(FieldArray::Numeric(modes)) = mode_fields.get("Mode")
-        {
-            let msg_texts = self
-                .parser
-                .messages()
-                .get("MSG")
-                .and_then(|m| m.get("Message"))
-                .and_then(|arr| match arr {
-                    FieldArray::Text(v) => Some(v.clone()),
-                    _ => None,
-                });
-            let as_text: Vec<String> = modes
-                .iter()
-                .map(|mode| crate::mode::get_mode_string(*mode, msg_texts.as_deref()))
-                .collect();
-            if let Some(fields) = self.parser.messages_mut().get_mut("MODE") {
-                fields.insert("asText".to_string(), FieldArray::Text(as_text));
-            }
-        }
     }
 
     /// Extract GPS-based log start time (requires GPS in message types).

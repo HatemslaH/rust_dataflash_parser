@@ -5,6 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-16
+
+### Added
+
+- **Viewer Enhancements:**
+  - Integrated zoom and pan functionality into the `PlotChart` component with keyboard shortcuts and dynamic cursor styling.
+  - Added flight mode visualization using shaded background bands and labels.
+  - Created automatic plot preset extraction from XML configurations, including a new `PresetTree` component.
+  - Enhanced GPS trajectory handling with dynamic GPS source resolution (resolving message types and instances).
+  - Added support for visualizing and formatting text-based data series in the plot charts.
+- **Parser WASM Updates:**
+  - Added flight mode parsing and mapping logic to translate raw modes into descriptive names.
+  - Ensured `MSG` message is automatically loaded when parsing `MODE` messages to compute mode timestamps correctly.
+- **CI & Release Workflows:**
+  - Integrated testing, formatting, and linting for the `viewer` project into the GitHub Actions CI workflow.
+  - Configured GitHub Release workflow to build, package, and attach the prebuilt standalone `viewer` application bundle (`uav-log-viewer.zip`).
+
+[0.3.0]: https://github.com/HatemslaH/rust_dataflash_parser/releases/tag/v0.3.0
+
 ## [0.2.1] - 2026-06-16
 
 ### Added

@@ -1,0 +1,129 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+.uplot-host {
+  width: 100%;
+  height: 100%;
+}
+
+.uplot {
+  font-family: inherit;
+}
+
+.uplot .u-legend {
+  display: none;
+}
+
+.uplot-host--zoom .u-over {
+  cursor: crosshair;
+}
+
+.uplot-host--pan .u-over {
+  cursor: grab;
+}
+
+.uplot-host--pan .u-over.u-panning {
+  cursor: grabbing;
+}
+
+.plot-zoom-shade {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.plot-zoom-selection {
+  border: 1px solid #fff;
+  box-sizing: border-box;
+}
+
+.map-container {
+  flex: 1;
+  min-height: 180px;
+}
+
+.panel-splitter {
+  flex-shrink: 0;
+  height: 6px;
+  cursor: row-resize;
+  background: var(--mantine-color-default-border);
+  transition: background-color 150ms ease;
+  touch-action: none;
+}
+
+.panel-splitter:hover,
+.panel-splitter:focus-visible {
+  background: var(--mantine-color-orange-6);
+  outline: none;
+}
+
+.panel-splitter::after {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 2px;
+  margin: 2px auto 0;
+  border-radius: 999px;
+  background: var(--mantine-color-dimmed);
+  opacity: 0.6;
+}
+
+.panel-splitter:hover::after,
+.panel-splitter:focus-visible::after {
+  opacity: 1;
+  background: var(--mantine-color-white);
+}
+
+.attitude-body {
+  padding: 10px;
+}
+
+.attitude-horizon {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--mantine-color-default-border);
+  margin-bottom: 10px;
+}
+
+.attitude-sky,
+.attitude-ground {
+  position: absolute;
+  left: -20%;
+  width: 140%;
+  height: 70%;
+}
+
+.attitude-sky {
+  top: 0;
+  background: linear-gradient(#1e88e5, #64b5f6);
+}
+
+.attitude-ground {
+  bottom: 0;
+  background: linear-gradient(#6d4c41, #8d6e63);
+}
+
+.attitude-crosshair {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 60%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.attitude-crosshair::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -20px;
+  width: 2px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.85);
+  transform: translateX(-50%);
+}

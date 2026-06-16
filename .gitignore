@@ -1,2 +1,7 @@
 /target
 /dataflash_logs/
+/private/
+/viewer/node_modules/
+/viewer/**/node_modules/
+/viewer/**/dist/
+/viewer/apps/desktop/src-tauri/target/
