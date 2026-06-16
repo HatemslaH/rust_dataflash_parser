@@ -1,11 +1,3 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  IconSearch,
-  IconX,
-  IconChevronDown,
-  IconChevronRight,
-  IconChartLine,
-} from "@tabler/icons-react";
 import {
   ActionIcon,
   Badge,
@@ -18,10 +10,14 @@ import {
   TextInput,
   UnstyledButton,
 } from "@mantine/core";
-import { getParserBackend } from "../platform";
-import type { MessageTypeEntry } from "../platform/types";
-import { useSessionStore } from "../stores/sessionStore";
-import { usePlotStore } from "../stores/plotStore";
+import {
+  IconChartLine,
+  IconChevronDown,
+  IconChevronRight,
+  IconSearch,
+  IconX,
+} from "@tabler/icons-react";
+import { useEffect, useMemo, useState } from "react";
 import { usePrefetchFieldSeries } from "../hooks/useFieldSeries";
 import { parseTypeName, plotId } from "../lib/fieldSeriesKey";
 import { loadPlotFields } from "../lib/plotFieldLoader";
@@ -30,6 +26,10 @@ import {
   resolveAvailablePresets,
   type AvailablePreset,
 } from "../lib/plotPresets";
+import { getParserBackend } from "../platform";
+import type { MessageTypeEntry } from "../platform/types";
+import { usePlotStore } from "../stores/plotStore";
+import { useSessionStore } from "../stores/sessionStore";
 import { PresetTree } from "./PresetTree";
 
 const SYSTEM_TYPES = ["FMT", "FMTU", "MULT", "UNIT"];
@@ -94,6 +94,11 @@ export function MessageTree() {
   const onFieldClick = async (typeName: string, fieldName: string) => {
     const { baseName, instance } = parseTypeName(typeName);
     const fieldKey = plotId(baseName, fieldName, instance);
+
+    if (activePlots.some((p) => p.id === fieldKey)) {
+      removePlot(fieldKey);
+      return;
+    }
 
     addPlot({ messageType: baseName, field: fieldName, instance });
 
