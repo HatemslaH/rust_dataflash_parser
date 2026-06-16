@@ -1,0 +1,14 @@
+[package]
+name = "rust_dataflash_parser"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "rust_dataflash_parser"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rust_dataflash_parser"
+path = "src/main.rs"
+
+[dependencies]
