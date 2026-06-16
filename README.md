@@ -22,7 +22,7 @@ pip install psutil   # optional, for memory metrics in benchmark_parsers.py
 `JsDataflashParser` is included as a [git submodule](https://github.com/Williangalvani/JsDataflashParser):
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/HatemslaH/rust_dataflash_parser.git
 cd rust_dataflash_parser
 git submodule update --init --recursive
 ```
@@ -30,8 +30,10 @@ git submodule update --init --recursive
 When cloning in one step:
 
 ```bash
-git clone --recurse-submodules <repo-url>
+git clone --recurse-submodules https://github.com/HatemslaH/rust_dataflash_parser.git
 ```
+
+Pre-built binaries for Linux, Windows, and macOS are available on the [Releases](https://github.com/HatemslaH/rust_dataflash_parser/releases) page.
 
 ## Quick start
 
@@ -157,6 +159,10 @@ The Rust port focuses on core parsing. Browser-only or metadata helpers from the
 - `trimFile`, Web Worker progress callbacks (`postMessage`)
 
 Parsing semantics for the default message set match the JS parser; the benchmark script checks that message counts agree.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
