@@ -8,6 +8,9 @@ repository = "https://github.com/HatemslaH/rust_dataflash_parser"
 readme = "README.md"
 keywords = ["ardupilot", "dataflash", "parser", "flight-log"]
 categories = ["parser-implementations", "aerospace"]
+authors = ["Yan <kalashnikovjan123@gmail.com>"]
+documentation = "https://docs.rs/rust_dataflash_parser"
+homepage = "https://github.com/HatemslaH/rust_dataflash_parser"
 
 [lib]
 name = "rust_dataflash_parser"
