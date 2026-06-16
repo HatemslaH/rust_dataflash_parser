@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { IconDownload, IconLoader2 } from "@tabler/icons-react";
+import { IconDownload } from "@tabler/icons-react";
+import {
+  Box,
+  Button,
+  Center,
+  Group,
+  Loader,
+  Stack,
+  Text,
+  useComputedColorScheme,
+} from "@mantine/core";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { usePlotSeriesData } from "../hooks/useFieldSeries";
@@ -36,17 +46,17 @@ function buildChartData(seriesData: ReturnType<typeof usePlotSeriesData>) {
 export function PlotChart() {
   const activePlots = usePlotStore((s) => s.activePlots);
   const seriesData = usePlotSeriesData(activePlots);
-  const theme = useSessionStore((s) => s.theme);
   const summary = useSessionStore((s) => s.summary);
   const hoveredTimeMs = useTimeStore((s) => s.hoveredTimeMs);
   const timeRange = useTimeStore((s) => s.timeRange);
   const setLogDurationMs = useTimeStore((s) => s.setLogDurationMs);
+  const computedColorScheme = useComputedColorScheme("dark");
 
   const containerRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
   const suppressCursorHookRef = useRef(false);
 
-  const isDark = theme === "dark";
+  const isDark = computedColorScheme === "dark";
   const gridColor = isDark ? "#3a4558" : "#d4d4d8";
   const textColor = isDark ? "#e8eaed" : "#18181b";
   const plotBg = isDark ? "#0f1218" : "#f8f8f8";
@@ -242,59 +252,78 @@ export function PlotChart() {
 
   if (activePlots.length === 0) {
     return (
-      <div className="panel-placeholder">
-        <p>Time-series plot area</p>
-        <p className="muted">Click a field in the Plot tab to add a series.</p>
-      </div>
+      <Center flex={1} p="xl">
+        <Stack align="center" gap="xs">
+          <Text c="dimmed">Time-series plot area</Text>
+          <Text size="sm" c="dimmed">
+            Click a field in the Plot tab to add a series.
+          </Text>
+        </Stack>
+      </Center>
     );
   }
 
   return (
-    <div className="plot-chart-container">
-      <div className="plot-toolbar">
-        <span className="plot-toolbar-info">
+    <Box style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <Group
+        justify="space-between"
+        px="sm"
+        py={6}
+        style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}
+      >
+        <Group gap={6}>
           {anyLoading && (
             <>
-              <IconLoader2 size={14} className="plot-spinner" />
-              Loading series…
+              <Loader size={14} type="oval" />
+              <Text size="xs" c="dimmed">
+                Loading series…
+              </Text>
             </>
           )}
           {!anyLoading && hasNumericData && (
-            <span>{activePlots.length} series · uPlot · time_boot_ms</span>
+            <Text size="xs" c="dimmed">
+              {activePlots.length} series · uPlot · time_boot_ms
+            </Text>
           )}
-        </span>
-        <button
-          type="button"
-          className="plot-export-btn"
+        </Group>
+        <Button
+          variant="default"
+          size="compact-xs"
+          leftSection={<IconDownload size={14} />}
           onClick={handleExportCsv}
           disabled={!hasNumericData}
           title="Export visible series to CSV"
         >
-          <IconDownload size={14} />
           CSV
-        </button>
-      </div>
-      <div className="plot-chart-wrap" style={{ background: plotBg }}>
+        </Button>
+      </Group>
+      <Box flex={1} mih={180} pos="relative" bg={plotBg}>
         {chartData ? (
-          <div ref={containerRef} className="uplot-host" />
+          <Box ref={containerRef} w="100%" h="100%" className="uplot-host" />
         ) : (
-          <div className="panel-placeholder">
-            {anyLoading ? (
-              <p>Loading plot data…</p>
-            ) : anyError ? (
-              <>
-                <p>Failed to load plot data</p>
-                <p className="muted">{firstError ?? "Unknown error"}</p>
-              </>
-            ) : (
-              <>
-                <p>No numeric data to plot</p>
-                <p className="muted">Selected fields may be text-only.</p>
-              </>
-            )}
-          </div>
+          <Center h="100%" p="xl">
+            <Stack align="center" gap="xs">
+              {anyLoading ? (
+                <Text c="dimmed">Loading plot data…</Text>
+              ) : anyError ? (
+                <>
+                  <Text c="dimmed">Failed to load plot data</Text>
+                  <Text size="sm" c="dimmed">
+                    {firstError ?? "Unknown error"}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text c="dimmed">No numeric data to plot</Text>
+                  <Text size="sm" c="dimmed">
+                    Selected fields may be text-only.
+                  </Text>
+                </>
+              )}
+            </Stack>
+          </Center>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

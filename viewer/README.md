@@ -6,7 +6,7 @@ Web UI for exploring ArduPilot **dataflash** binary logs (`.BIN`). This package 
 
 ## Features
 
-- **Sidebar layout** inspired by [UAV Log Viewer](https://github.com/ardupilot/uavlogviewer): Home / Plot / More tabs
+- **Sidebar layout** with Plot / More tabs ([Mantine](https://mantine.dev/) AppShell)
 - **Time-series charts** with [uPlot](https://github.com/leeoniya/uPlot) — multi-series, dual Y-axis, drag-to-zoom, CSV export
 - **3D map** with [MapLibre GL JS](https://maplibre.org/) + [Three.js](https://threejs.org/) via [`@dvt3d/maplibre-three-plugin`](https://github.com/dvt3d/maplibre-three-plugin) — GPS trajectory and vehicle marker
 - **Message browser** — filterable tree of log message types and fields; click a field to plot it
@@ -21,7 +21,7 @@ Web UI for exploring ArduPilot **dataflash** binary logs (`.BIN`). This package 
 | Charts | uPlot |
 | Map | maplibre-gl, three, @dvt3d/maplibre-three-plugin |
 | Data fetching | @tanstack/react-query |
-| Components | @mantine/core (provider), @tabler/icons-react |
+| Components | @mantine/core, @tabler/icons-react |
 
 ## Prerequisites
 

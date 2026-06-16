@@ -1,11 +1,18 @@
 import { useRef, type ChangeEvent, type DragEvent } from "react";
 import {
   IconCloudUpload,
-  IconFileCode,
-  IconHistory,
   IconInfoCircle,
   IconPlayerPlay,
 } from "@tabler/icons-react";
+import {
+  Button,
+  Group,
+  Paper,
+  Progress,
+  Stack,
+  Text,
+  ThemeIcon,
+} from "@mantine/core";
 import { getParserBackend } from "../platform";
 import { useSessionStore } from "../stores/sessionStore";
 import { resetViewerData } from "../lib/sessionReset";
@@ -18,11 +25,8 @@ export function FileOpenPanel({ onLogOpened }: FileOpenPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const summary = useSessionStore((s) => s.summary);
   const progress = useSessionStore((s) => s.progress);
-  const recentFiles = useSessionStore((s) => s.recentFiles);
   const setSummary = useSessionStore((s) => s.setSummary);
   const setProgress = useSessionStore((s) => s.setProgress);
-  const addRecentFile = useSessionStore((s) => s.addRecentFile);
-  const clearRecentFiles = useSessionStore((s) => s.clearRecentFiles);
   const backend = getParserBackend();
 
   const openFile = async (file: File | string) => {
@@ -39,10 +43,6 @@ export function FileOpenPanel({ onLogOpened }: FileOpenPanelProps) {
       setProgress({ phase: "indexing", percent: 5, message: "Opening log..." });
       const result = await backend.openFile(file);
       setSummary(result);
-      addRecentFile({
-        name,
-        size: isString ? result.fileSize : file.size,
-      });
       onLogOpened?.();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -77,9 +77,12 @@ export function FileOpenPanel({ onLogOpened }: FileOpenPanelProps) {
   };
 
   return (
-    <div className="file-open">
-      <div
-        className="dropzone"
+    <Stack gap="md">
+      <Paper
+        withBorder
+        radius="md"
+        p="xl"
+        style={{ cursor: "pointer", borderStyle: "dashed" }}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onClick={onBrowse}
@@ -87,9 +90,15 @@ export function FileOpenPanel({ onLogOpened }: FileOpenPanelProps) {
         tabIndex={0}
         onKeyDown={(e) => e.key === "Enter" && onBrowse()}
       >
-        <IconCloudUpload className="dropzone-icon" size={32} stroke={1.5} />
-        <p className="dropzone-title">Drop .BIN file here</p>
-        <p className="dropzone-hint">or click to browse</p>
+        <Stack align="center" gap="xs">
+          <ThemeIcon variant="light" size="xl" radius="xl">
+            <IconCloudUpload size={28} stroke={1.5} />
+          </ThemeIcon>
+          <Text fw={600}>Drop .BIN file here</Text>
+          <Text size="sm" c="dimmed">
+            or click to browse
+          </Text>
+        </Stack>
         <input
           ref={inputRef}
           type="file"
@@ -97,93 +106,77 @@ export function FileOpenPanel({ onLogOpened }: FileOpenPanelProps) {
           hidden
           onChange={onInputChange}
         />
-      </div>
+      </Paper>
 
-      <button type="button" className="demo-btn" onClick={() => void loadDemo()}>
-        <IconPlayerPlay size={16} />
+      <Button
+        variant="light"
+        leftSection={<IconPlayerPlay size={16} />}
+        onClick={() => void loadDemo()}
+        fullWidth
+      >
         Load demo log (mock data)
-      </button>
+      </Button>
 
-      <div className="progress-block">
-        <div className="progress-info">
-          <span>Status</span>
-          <span>{progress.percent}%</span>
-        </div>
-        <div className="progress-bar">
-          <div className="progress-fill" style={{ width: `${progress.percent}%` }} />
-        </div>
-        <p className={`progress-text ${progress.phase === "error" ? "error" : ""}`} title={progress.message}>
+      <Stack gap={6}>
+        <Group justify="space-between">
+          <Text size="xs" c="dimmed">
+            Status
+          </Text>
+          <Text size="xs" c="dimmed">
+            {progress.percent}%
+          </Text>
+        </Group>
+        <Progress value={progress.percent} size="sm" radius="xl" />
+        <Text
+          size="sm"
+          c={progress.phase === "error" ? "red" : "dimmed"}
+          lineClamp={2}
+          title={progress.message}
+        >
           {progress.message}
-        </p>
-      </div>
+        </Text>
+      </Stack>
 
       {summary && (
-        <div className="meta-card-container">
-          <div className="meta-card-label">
-            <IconInfoCircle size={12} />
-            <span>Log Metadata</span>
-          </div>
-          <dl className="meta-card">
-            <div>
-              <dt>File</dt>
-              <dd title={summary.fileName}>{summary.fileName}</dd>
-            </div>
-            <div>
-              <dt>Size</dt>
-              <dd>{formatBytes(summary.fileSize)}</dd>
-            </div>
-            <div>
-              <dt>Message types</dt>
-              <dd>{summary.messageTypeCount}</dd>
-            </div>
+        <Paper withBorder radius="md" p="sm">
+          <Group gap={6} mb="xs">
+            <IconInfoCircle size={14} />
+            <Text size="xs" fw={700} tt="uppercase" c="dimmed">
+              Log metadata
+            </Text>
+          </Group>
+          <Stack gap={6}>
+            <MetadataRow label="File" value={summary.fileName} />
+            <MetadataRow label="Size" value={formatBytes(summary.fileSize)} />
+            <MetadataRow label="Message types" value={String(summary.messageTypeCount)} />
             {summary.startTime && (
-              <div>
-                <dt>Start time</dt>
-                <dd>{new Date(summary.startTime).toLocaleString()}</dd>
-              </div>
+              <MetadataRow
+                label="Start time"
+                value={new Date(summary.startTime).toLocaleString()}
+              />
             )}
-            <div>
-              <dt>Backend</dt>
-              <dd>mock ({backend.platform})</dd>
-            </div>
-          </dl>
-        </div>
+            <MetadataRow label="Backend" value={`mock (${backend.platform})`} />
+          </Stack>
+        </Paper>
       )}
 
-      {recentFiles.length > 0 && (
-        <div className="recent-files">
-          <div className="recent-files-header">
-            <div className="recent-files-title">
-              <IconHistory size={12} />
-              <span>Recent files</span>
-            </div>
-            <button type="button" className="clear-btn" onClick={clearRecentFiles}>
-              Clear
-            </button>
-          </div>
-          <ul className="recent-files-list">
-            {recentFiles.map((file, idx) => (
-              <li key={`${file.name}-${idx}`}>
-                <button
-                  type="button"
-                  className="recent-file-item"
-                  onClick={() => void openFile(file.name)}
-                  title={file.name}
-                >
-                  <div className="recent-file-info">
-                    <span className="recent-file-name">{file.name}</span>
-                    <span className="recent-file-meta">{formatBytes(file.size)}</span>
-                  </div>
-                  <IconFileCode size={14} className="muted" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <Text size="xs" c="dimmed">
+        Dataflash Viewer — UI demo with mock parser
+      </Text>
+    </Stack>
+  );
+}
 
-      <p className="buildinfo">Dataflash Viewer — UI demo with mock parser</p>
-    </div>
+function MetadataRow({ label, value }: { label: string; value: string }) {
+  return (
+    <Group justify="space-between" gap="sm" wrap="nowrap">
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+      <Text size="xs" ff="monospace" ta="right" lineClamp={1} title={value}>
+        {value}
+      </Text>
+    </Group>
   );
 }
 

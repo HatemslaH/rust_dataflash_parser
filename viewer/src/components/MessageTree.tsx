@@ -5,9 +5,19 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconChartLine,
-  IconEye,
-  IconEyeOff,
 } from "@tabler/icons-react";
+import {
+  ActionIcon,
+  Badge,
+  Box,
+  Button,
+  Group,
+  ScrollArea,
+  Stack,
+  Text,
+  TextInput,
+  UnstyledButton,
+} from "@mantine/core";
 import { getParserBackend } from "../platform";
 import type { MessageTypeEntry } from "../platform/types";
 import { useSessionStore } from "../stores/sessionStore";
@@ -40,7 +50,11 @@ export function MessageTree() {
   }, [summary, backend]);
 
   if (!summary) {
-    return <p className="empty-hint">Open a log to browse message types.</p>;
+    return (
+      <Text size="sm" c="dimmed">
+        Open a log to browse message types.
+      </Text>
+    );
   }
 
   const needle = filter.trim().toLowerCase();
@@ -81,119 +95,155 @@ export function MessageTree() {
   };
 
   return (
-    <div className="message-tree-container">
+    <Stack gap="sm" h="100%">
       {activePlots.length > 0 && (
-        <div className="active-plots">
-          <div className="active-plots-header">
-            <div className="active-plots-title">
-              <IconChartLine size={12} />
-              <span>Active plots ({activePlots.length})</span>
-            </div>
-            <button type="button" className="clear-btn" onClick={clearPlots}>
+        <Box pb="sm" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
+          <Group justify="space-between" mb="xs">
+            <Group gap={6}>
+              <IconChartLine size={14} />
+              <Text size="xs" fw={700} tt="uppercase" c="dimmed">
+                Active plots ({activePlots.length})
+              </Text>
+            </Group>
+            <Button variant="subtle" size="compact-xs" onClick={clearPlots}>
               Clear all
-            </button>
-          </div>
-          <ul className="active-plots-list">
+            </Button>
+          </Group>
+          <Group gap={6}>
             {activePlots.map((plot) => (
-              <li key={plot.id}>
-                <span className="active-plot-badge">
-                  <span className="active-plot-color" style={{ backgroundColor: plot.color }} />
-                  <span>{plot.id}</span>
-                  <button
-                    type="button"
-                    className="axis-badge"
-                    onClick={() => togglePlotAxis(plot.id)}
-                    title="Toggle Y axis"
-                  >
-                    Y{plot.yAxis}
-                  </button>
-                  <button
-                    type="button"
-                    className="active-plot-remove"
-                    onClick={() => removePlot(plot.id)}
-                    title="Remove plot"
-                  >
-                    <IconX size={10} />
-                  </button>
-                </span>
-              </li>
+              <Badge
+                key={plot.id}
+                variant="outline"
+                leftSection={
+                  <Box
+                    w={8}
+                    h={8}
+                    style={{ borderRadius: "50%", backgroundColor: plot.color }}
+                  />
+                }
+                rightSection={
+                  <Group gap={2}>
+                    <UnstyledButton
+                      onClick={() => togglePlotAxis(plot.id)}
+                      title="Toggle Y axis"
+                      style={{ fontSize: 10, opacity: 0.8 }}
+                    >
+                      Y{plot.yAxis}
+                    </UnstyledButton>
+                    <ActionIcon
+                      size="xs"
+                      variant="transparent"
+                      onClick={() => removePlot(plot.id)}
+                      aria-label="Remove plot"
+                    >
+                      <IconX size={10} />
+                    </ActionIcon>
+                  </Group>
+                }
+                styles={{ root: { fontFamily: "var(--mantine-font-family-monospace)" } }}
+              >
+                {plot.id}
+              </Badge>
             ))}
-          </ul>
-        </div>
+          </Group>
+        </Box>
       )}
 
-      <div className="search-container">
-        <IconSearch className="search-icon" size={14} />
-        <input
-          className="search-input"
-          placeholder="Filter types or fields…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        {filter && (
-          <button type="button" className="search-clear" onClick={() => setFilter("")}>
-            <IconX size={14} />
-          </button>
-        )}
-      </div>
+      <TextInput
+        placeholder="Filter types or fields…"
+        leftSection={<IconSearch size={14} />}
+        rightSection={
+          filter ? (
+            <ActionIcon size="sm" variant="subtle" onClick={() => setFilter("")}>
+              <IconX size={14} />
+            </ActionIcon>
+          ) : null
+        }
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+      />
 
-      <div className="tree-toolbar">
-        <span>Showing {filtered.length} types</span>
-        <button
-          type="button"
-          className="toggle-container"
+      <Group justify="space-between">
+        <Text size="xs" c="dimmed">
+          Showing {filtered.length} types
+        </Text>
+        <Button
+          variant="subtle"
+          size="compact-xs"
           onClick={() => setHideSystem(!hideSystem)}
         >
-          {hideSystem ? <IconEyeOff size={12} /> : <IconEye size={12} />}
-          <span>{hideSystem ? "Hide system" : "Show system"}</span>
-        </button>
-      </div>
+          {hideSystem ? "Show system" : "Hide system"}
+        </Button>
+      </Group>
 
-      <div className="message-tree">
-        <ul className="tree-root">
+      <ScrollArea flex={1} offsetScrollbars type="auto">
+        <Stack gap={2}>
           {filtered.map((type) => {
             const isOpen = expanded[type.name] ?? false;
             return (
-              <li key={type.name} className="tree-type">
-                <button
-                  type="button"
-                  className="tree-type-btn"
+              <Box key={type.name}>
+                <UnstyledButton
+                  w="100%"
+                  p={6}
+                  style={{ borderRadius: "var(--mantine-radius-sm)" }}
                   onClick={() => setExpanded((s) => ({ ...s, [type.name]: !isOpen }))}
                 >
-                  <span className="chevron">
+                  <Group gap={8} wrap="nowrap">
                     {isOpen ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
-                  </span>
-                  <span className="type-name">{type.name}</span>
-                  <span className="type-count">{type.count.toLocaleString()}</span>
-                  {type.loaded && <span className="badge-loaded">loaded</span>}
-                </button>
+                    <Text size="sm" ff="monospace" fw={600} style={{ flex: 1 }}>
+                      {type.name}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {type.count.toLocaleString()}
+                    </Text>
+                    {type.loaded && (
+                      <Badge size="xs" variant="light" color="cyan">
+                        loaded
+                      </Badge>
+                    )}
+                  </Group>
+                </UnstyledButton>
                 {isOpen && (
-                  <ul className="tree-fields">
+                  <Stack gap={2} pl={20} ml={8} style={{ borderLeft: "1px solid var(--mantine-color-default-border)" }}>
                     {type.fields.map((field) => {
                       const { baseName, instance } = parseTypeName(type.name);
                       const active = isFieldPlotted(type.name, field.name);
                       const fieldKey = plotId(baseName, field.name, instance);
                       return (
-                        <li key={field.name}>
-                          <button
-                            type="button"
-                            className={`field-btn ${active ? "active" : ""}`}
-                            onClick={() => void onFieldClick(type.name, field.name)}
-                            disabled={loadingField === fieldKey}
-                          >
-                            <span>{field.name}</span>
-                            {field.units && <span className="field-units">{field.units}</span>}
-                          </button>
-                        </li>
+                        <UnstyledButton
+                          key={field.name}
+                          w="100%"
+                          p={6}
+                          disabled={loadingField === fieldKey}
+                          onClick={() => void onFieldClick(type.name, field.name)}
+                          style={{
+                            borderRadius: "var(--mantine-radius-sm)",
+                            backgroundColor: active
+                              ? "var(--mantine-color-orange-light)"
+                              : undefined,
+                            color: active ? "var(--mantine-color-orange-7)" : undefined,
+                          }}
+                        >
+                          <Group justify="space-between" wrap="nowrap">
+                            <Text size="xs" ff="monospace">
+                              {field.name}
+                            </Text>
+                            {field.units && (
+                              <Text size="xs" c="dimmed">
+                                {field.units}
+                              </Text>
+                            )}
+                          </Group>
+                        </UnstyledButton>
                       );
                     })}
-                  </ul>
+                  </Stack>
                 )}
-              </li>
+              </Box>
             );
           })}
-        </ul>
-      </div>
-    </div>
+        </Stack>
+      </ScrollArea>
+    </Stack>
   );
 }

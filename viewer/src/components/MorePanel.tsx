@@ -1,3 +1,4 @@
+import { Checkbox, Divider, Stack, Text, Title } from "@mantine/core";
 import { useSessionStore } from "../stores/sessionStore";
 
 export function MorePanel() {
@@ -10,33 +11,42 @@ export function MorePanel() {
   const processDone = useSessionStore((s) => s.processDone);
 
   if (!processDone) {
-    return <p className="empty-hint">Open a log to access view options.</p>;
+    return (
+      <Text size="sm" c="dimmed">
+        Open a log to access view options.
+      </Text>
+    );
   }
 
   return (
-    <div className="more-panel">
-      <h3 className="more-section-title">Show / hide</h3>
-      <div className="show-hide-list">
-        <label className="show-hide-item">
-          <input type="checkbox" checked={showPlot} onChange={(e) => setShowPlot(e.target.checked)} />
-          <span>Charts</span>
-        </label>
-        <label className="show-hide-item">
-          <input type="checkbox" checked={showMap} onChange={(e) => setShowMap(e.target.checked)} />
-          <span>Map (MapLibre + Three.js)</span>
-        </label>
-        <label className="show-hide-item">
-          <input type="checkbox" checked={showAttitude} onChange={(e) => setShowAttitude(e.target.checked)} />
-          <span>Attitude widget</span>
-        </label>
-      </div>
+    <Stack gap="md">
+      <Title order={6} ta="center" tt="uppercase" c="dimmed">
+        Show / hide
+      </Title>
+      <Stack gap="sm">
+        <Checkbox
+          label="Charts"
+          checked={showPlot}
+          onChange={(e) => setShowPlot(e.currentTarget.checked)}
+        />
+        <Checkbox
+          label="Map (MapLibre + Three.js)"
+          checked={showMap}
+          onChange={(e) => setShowMap(e.currentTarget.checked)}
+        />
+        <Checkbox
+          label="Attitude widget"
+          checked={showAttitude}
+          onChange={(e) => setShowAttitude(e.currentTarget.checked)}
+        />
+      </Stack>
 
-      <hr className="more-divider" />
+      <Divider />
 
-      <p className="more-hint">
+      <Text size="sm" c="dimmed">
         Hover over the chart to sync the time cursor with the map and attitude instrument.
         Drag on the chart to zoom the time range.
-      </p>
-    </div>
+      </Text>
+    </Stack>
   );
 }

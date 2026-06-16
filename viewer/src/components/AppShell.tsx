@@ -1,15 +1,27 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   IconSun,
   IconMoon,
   IconChevronLeft,
   IconChevronRight,
-  IconHome,
   IconChartLine,
   IconDots,
   IconRefresh,
   IconPlane,
 } from "@tabler/icons-react";
+import {
+  AppShell as MantineAppShell,
+  ActionIcon,
+  Box,
+  Center,
+  Group,
+  SegmentedControl,
+  Stack,
+  Text,
+  Tooltip,
+  useComputedColorScheme,
+  useMantineColorScheme,
+} from "@mantine/core";
 import { FileOpenPanel } from "./FileOpenPanel";
 import { MessageTree } from "./MessageTree";
 import { MorePanel } from "./MorePanel";
@@ -20,14 +32,15 @@ import { useSessionStore } from "../stores/sessionStore";
 import { getParserBackend } from "../platform";
 import { resetViewerData } from "../lib/sessionReset";
 
-type SidebarTab = "home" | "plot" | "more";
+type SidebarTab = "plot" | "more";
 
 export function AppShell() {
-  const [tab, setTab] = useState<SidebarTab>("home");
+  const [tab, setTab] = useState<SidebarTab>("plot");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const theme = useSessionStore((s) => s.theme);
-  const setTheme = useSessionStore((s) => s.setTheme);
+  const { setColorScheme } = useMantineColorScheme();
+  const computedColorScheme = useComputedColorScheme("dark");
+
   const summary = useSessionStore((s) => s.summary);
   const processDone = useSessionStore((s) => s.processDone);
   const showPlot = useSessionStore((s) => s.showPlot);
@@ -35,18 +48,12 @@ export function AppShell() {
   const reset = useSessionStore((s) => s.reset);
   const backend = getParserBackend();
 
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle("light", theme === "light");
-    root.classList.toggle("dark", theme === "dark");
-  }, [theme]);
-
   const handleCloseLog = async () => {
     try {
       await backend.closeLog();
       resetViewerData();
       reset();
-      setTab("home");
+      setTab("plot");
     } catch (err) {
       console.error("Failed to close log:", err);
     }
@@ -56,106 +63,125 @@ export function AppShell() {
     setTab("plot");
   };
 
-  const plotRowClass = showMap ? "half" : "full";
-  const mapRowClass = showPlot ? "half" : "full";
+  const toggleTheme = () => {
+    setColorScheme(computedColorScheme === "dark" ? "light" : "dark");
+  };
+
+  const plotFlex = showMap ? 1 : 1;
+  const mapFlex = showPlot ? 1 : 1;
 
   return (
-    <div className="app-shell">
+    <>
       <AttitudeWidget />
 
-      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
-        <header className="sidebar-brand">
-          <IconPlane size={18} className="brand-plane" />
-          {!sidebarCollapsed && (
-            <span>
-              <b>Dataflash</b> Viewer
-            </span>
-          )}
-        </header>
+      <MantineAppShell
+        navbar={{
+          width: sidebarCollapsed ? 56 : 280,
+          breakpoint: "sm",
+        }}
+        padding={0}
+      >
+        <MantineAppShell.Navbar p={sidebarCollapsed ? "xs" : "md"}>
+          <Stack gap="sm" h="100%">
+            <Group gap="sm" justify={sidebarCollapsed ? "center" : "flex-start"} wrap="nowrap">
+              <IconPlane size={18} color="var(--mantine-color-orange-6)" />
+              {!sidebarCollapsed && (
+                <Text size="sm" fw={600}>
+                  Dataflash Viewer
+                </Text>
+              )}
+            </Group>
 
-        {summary && !sidebarCollapsed && (
-          <p className="filename" title={summary.fileName}>
-            {summary.fileName}
-          </p>
-        )}
+            {summary && !sidebarCollapsed && (
+              <Text size="xs" c="dimmed" lineClamp={1} title={summary.fileName}>
+                {summary.fileName}
+              </Text>
+            )}
 
-        <nav className="sidebar-tabs" aria-label="Sidebar">
-          {(processDone
-            ? ([
-                ["plot", "Plot", IconChartLine],
-                ["more", "More", IconDots],
-              ] as const)
-            : ([["home", "Home", IconHome]] as const)
-          ).map(([id, label, Icon]) => (
-            <button
-              key={id}
-              type="button"
-              className={tab === id ? "tab active" : "tab"}
-              onClick={() => setTab(id)}
-              title={sidebarCollapsed ? label : undefined}
-            >
-              <Icon size={16} />
-              {!sidebarCollapsed && <span>{label}</span>}
-            </button>
-          ))}
-        </nav>
+            {processDone && !sidebarCollapsed && (
+              <SegmentedControl
+                value={tab}
+                onChange={(value) => setTab(value as SidebarTab)}
+                data={[
+                  {
+                    value: "plot",
+                    label: (
+                      <Center style={{ gap: 6 }}>
+                        <IconChartLine size={14} />
+                        <span>Plot</span>
+                      </Center>
+                    ),
+                  },
+                  {
+                    value: "more",
+                    label: (
+                      <Center style={{ gap: 6 }}>
+                        <IconDots size={14} />
+                        <span>More</span>
+                      </Center>
+                    ),
+                  },
+                ]}
+                fullWidth
+              />
+            )}
 
-        <div className="sidebar-content">
-          {tab === "home" && <FileOpenPanel onLogOpened={onLogOpened} />}
-          {tab === "plot" && processDone && <MessageTree />}
-          {tab === "more" && processDone && <MorePanel />}
-        </div>
+            <Box style={{ flex: 1, overflow: "auto", minHeight: 0, display: sidebarCollapsed ? "none" : undefined }}>
+              {!processDone && <FileOpenPanel onLogOpened={onLogOpened} />}
+              {processDone && tab === "plot" && <MessageTree />}
+              {processDone && tab === "more" && <MorePanel />}
+            </Box>
 
-        <div className="sidebar-footer">
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-          >
-            {theme === "dark" ? <IconSun size={16} /> : <IconMoon size={16} />}
-          </button>
-          {summary && (
-            <button
-              type="button"
-              className="icon-btn"
-              onClick={() => void handleCloseLog()}
-              title="Close current log"
-            >
-              <IconRefresh size={16} />
-            </button>
-          )}
-          <button
-            type="button"
-            className="sidebar-toggle"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {sidebarCollapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
-          </button>
-        </div>
-      </aside>
+            <Group gap={6} justify="flex-end" mt="auto">
+              <Tooltip label={`Switch to ${computedColorScheme === "dark" ? "light" : "dark"} theme`}>
+                <ActionIcon variant="default" onClick={toggleTheme}>
+                  {computedColorScheme === "dark" ? <IconSun size={16} /> : <IconMoon size={16} />}
+                </ActionIcon>
+              </Tooltip>
+              {summary && (
+                <Tooltip label="Close current log">
+                  <ActionIcon variant="default" onClick={() => void handleCloseLog()}>
+                    <IconRefresh size={16} />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+              <Tooltip label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+                <ActionIcon
+                  variant="default"
+                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                >
+                  {sidebarCollapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
+                </ActionIcon>
+              </Tooltip>
+            </Group>
+          </Stack>
+        </MantineAppShell.Navbar>
 
-      <main className="main">
-        {showPlot && (
-          <section className={`panel chart-panel row-${plotRowClass}`}>
-            <PlotChart />
-          </section>
-        )}
-        {showMap && (
-          <section className={`panel map-panel row-${mapRowClass}`}>
-            <MapView />
-          </section>
-        )}
-        {!showPlot && !showMap && (
-          <section className="panel panel-empty">
-            <div className="panel-placeholder">
-              <p>All panels hidden</p>
-              <p className="muted">Enable charts or map in the More tab.</p>
-            </div>
-          </section>
-        )}
-      </main>
-    </div>
+        <MantineAppShell.Main>
+          <Stack gap={0} h="100vh">
+            {showPlot && (
+              <Box style={{ flex: plotFlex, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                <PlotChart />
+              </Box>
+            )}
+            {showMap && (
+              <Box style={{ flex: mapFlex, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                <MapView />
+              </Box>
+            )}
+            {!showPlot && !showMap && (
+              <Center flex={1} p="xl">
+                <Stack align="center" gap="xs">
+                  <Text c="dimmed">All panels hidden</Text>
+                  <Text size="sm" c="dimmed">
+                    Enable charts or map in the More tab.
+                  </Text>
+                </Stack>
+              </Center>
+            )}
+          </Stack>
+        </MantineAppShell.Main>
+      </MantineAppShell>
+    </>
   );
 }

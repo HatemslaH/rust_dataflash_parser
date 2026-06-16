@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import * as THREE from "three";
 import * as MTP from "@dvt3d/maplibre-three-plugin";
+import { Center, Stack, Text } from "@mantine/core";
 import { useGpsTrajectory } from "../hooks/useFieldSeries";
 import { useSessionStore } from "../stores/sessionStore";
 import { useTimeStore } from "../stores/timeStore";
@@ -165,27 +166,35 @@ export function MapView() {
 
   if (!summary) {
     return (
-      <div className="panel-placeholder map-placeholder">
-        <p>3D trajectory map</p>
-        <p className="muted">Open a log to display GPS trajectory.</p>
-      </div>
+      <Center flex={1} p="xl">
+        <Stack align="center" gap="xs">
+          <Text c="dimmed">3D trajectory map</Text>
+          <Text size="sm" c="dimmed">
+            Open a log to display GPS trajectory.
+          </Text>
+        </Stack>
+      </Center>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="panel-placeholder map-placeholder">
-        <p>Loading map data…</p>
-      </div>
+      <Center flex={1} p="xl">
+        <Text c="dimmed">Loading map data…</Text>
+      </Center>
     );
   }
 
   if (isError || !lats || lats.length === 0) {
     return (
-      <div className="panel-placeholder map-error">
-        <p>No Map Data</p>
-        <p className="muted">This log does not contain enough GPS data to display on the map.</p>
-      </div>
+      <Center flex={1} p="xl">
+        <Stack align="center" gap="xs">
+          <Text c="dimmed">No map data</Text>
+          <Text size="sm" c="dimmed">
+            This log does not contain enough GPS data to display on the map.
+          </Text>
+        </Stack>
+      </Center>
     );
   }
 
