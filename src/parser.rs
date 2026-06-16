@@ -12,7 +12,10 @@ use crate::types::{
     MessageStats, MessageTypeInfo, ParseResult, ParseStats,
 };
 
-/// Fast Rust port of JsDataflashParser (`JsDataflashParser/parser.js`).
+/// Low-level dataflash parser engine.
+///
+/// Prefer [`crate::LogSession`] for application code. Use this type when you need direct
+/// access to the FMT table, buffer, or incremental parsing primitives.
 #[derive(Debug)]
 pub struct DataflashParser {
     buffer: Arc<[u8]>,
@@ -31,6 +34,7 @@ impl Default for DataflashParser {
 }
 
 impl DataflashParser {
+    /// Create an empty parser with the built-in FMT bootstrap entry.
     pub fn new() -> Self {
         let mut parser = Self {
             buffer: Arc::new([]),
@@ -45,6 +49,7 @@ impl DataflashParser {
         parser
     }
 
+    /// Replace the log buffer (resets indexed state).
     pub fn set_buffer(&mut self, data: Vec<u8>) {
         self.buffer = Arc::from(data);
         self.indexed = false;
@@ -71,14 +76,17 @@ impl DataflashParser {
         &self.buffer
     }
 
+    /// Message type schema built by [`Self::index`].
     pub fn message_types(&self) -> &HashMap<String, MessageTypeInfo> {
         &self.message_types
     }
 
+    /// Decoded message columns populated by [`Self::load_message_type`].
     pub fn messages(&self) -> &HashMap<String, HashMap<String, FieldArray>> {
         &self.messages
     }
 
+    /// Binary files reassembled from FILE messages.
     pub fn files(&self) -> &HashMap<String, Vec<u8>> {
         &self.files
     }
@@ -95,6 +103,7 @@ impl DataflashParser {
         parse_type_at(&self.buffer, offset, type_char)
     }
 
+    /// Per-type on-disk size statistics from the FMT offset table.
     pub fn stats(&self) -> HashMap<String, MessageStats> {
         let mut ret = HashMap::new();
         for entry in self.fmt.iter().flatten() {
@@ -620,6 +629,7 @@ impl DataflashParser {
         stats
     }
 
+    /// Build a [`ParseResult`] from the current parser state and metadata.
     pub fn snapshot(&self, metadata: LogMetadata) -> ParseResult {
         ParseResult {
             metadata,
@@ -632,6 +642,10 @@ impl DataflashParser {
     }
 
     /// Full parse pipeline matching `DataflashParser.processData` in JS.
+    ///
+    /// # Deprecated
+    ///
+    /// Use [`LogSession`](crate::LogSession) instead: `open` → `index` → `load_messages`.
     #[deprecated(note = "use LogSession")]
     pub fn process_data(
         &mut self,

@@ -1,6 +1,6 @@
 [package]
 name = "rust_dataflash_parser"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Fast Rust parser for ArduPilot dataflash (.BIN) logs"
 license = "MIT"
@@ -9,7 +9,7 @@ readme = "README.md"
 keywords = ["ardupilot", "dataflash", "parser", "flight-log"]
 categories = ["parser-implementations", "aerospace"]
 authors = ["Yan <kalashnikovjan123@gmail.com>"]
-documentation = "https://docs.rs/rust_dataflash_parser"
+documentation = "https://docs.rs/rust_dataflash_parser/latest/rust_dataflash_parser/"
 homepage = "https://github.com/HatemslaH/rust_dataflash_parser"
 
 [lib]

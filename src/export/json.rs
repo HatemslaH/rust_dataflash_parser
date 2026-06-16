@@ -44,26 +44,37 @@ pub struct MessageStatsJson {
     size: usize,
 }
 
+/// Stable JSON export schema for UI and tooling (`schema_version: 1`).
 #[derive(Serialize)]
 pub struct LogExport {
+    /// Schema version; currently `1`.
     pub schema_version: u32,
+    /// Log metadata (file size, optional GPS start time).
     pub metadata: LogMetadata,
+    /// Message type schema from indexing.
     pub message_types: HashMap<String, MessageTypeInfo>,
+    /// Decoded message columns.
     pub messages: HashMap<String, HashMap<String, FieldArrayJson>>,
+    /// FILE payloads encoded as base64 strings.
     pub files: HashMap<String, String>,
+    /// Aggregate parse stats.
     pub stats: ParseStats,
+    /// Per-type on-disk size stats.
     pub fmt_stats: HashMap<String, MessageStatsJson>,
 }
 
 impl ParseResult {
+    /// Serialize to compact JSON.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(&self.to_log_export())
     }
 
+    /// Serialize to pretty-printed JSON.
     pub fn to_json_pretty(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(&self.to_log_export())
     }
 
+    /// Build the versioned [`LogExport`] struct for custom serialization.
     pub fn to_log_export(&self) -> LogExport {
         let messages = self
             .messages

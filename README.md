@@ -4,6 +4,8 @@ A fast, idiomatic Rust port of [JsDataflashParser](JsDataflashParser/) for parsi
 
 This repository also includes tooling to download autotest logs, benchmark JS vs Rust parsers, and compare parse time and memory usage.
 
+**API documentation:** [docs.rs/rust_dataflash_parser/latest/rust_dataflash_parser](https://docs.rs/rust_dataflash_parser/latest/rust_dataflash_parser/)
+
 ## Prerequisites
 
 | Tool | Used for |
@@ -57,6 +59,8 @@ cargo build --release
 On Windows the binary is `target\release\rust_dataflash_parser.exe`.
 
 ## Library usage
+
+Full API reference: [docs.rs/rust_dataflash_parser/latest/rust_dataflash_parser](https://docs.rs/rust_dataflash_parser/latest/rust_dataflash_parser/)
 
 ### LogSession (recommended)
 
