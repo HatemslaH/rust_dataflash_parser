@@ -13,15 +13,18 @@ export function formatAxisFieldLabels(plots: ActivePlot[], yAxis: 1 | 2): string
 }
 
 export function formatDurationMs(ms: number): string {
-  const totalSec = Math.floor(ms / 1000);
+  const totalMs = Math.round(ms);
+  const totalSec = Math.floor(totalMs / 1000);
+  const millis = totalMs % 1000;
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
+  const msStr = String(millis).padStart(3, "0");
   if (h > 0) {
-    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    return `${pad(h)}:${pad(m)}:${pad(s)}.${msStr}`;
   }
-  return `${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}.${msStr}`;
 }
 
 export interface SeriesStats {

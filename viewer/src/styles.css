@@ -18,6 +18,27 @@ body,
   display: none;
 }
 
+.uplot-host--zoom .u-over {
+  cursor: crosshair;
+}
+
+.uplot-host--pan .u-over {
+  cursor: grab;
+}
+
+.uplot-host--pan .u-over.u-panning {
+  cursor: grabbing;
+}
+
+.plot-zoom-shade {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.plot-zoom-selection {
+  border: 1px solid #fff;
+  box-sizing: border-box;
+}
+
 .map-container {
   flex: 1;
   min-height: 180px;
