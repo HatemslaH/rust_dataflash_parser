@@ -1,0 +1,14 @@
+{
+  "name": "@dfv/parser-wasm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./pkg/parser_wasm.js",
+  "types": "./pkg/parser_wasm.d.ts",
+  "files": [
+    "pkg"
+  ],
+  "scripts": {
+    "build": "npx wasm-pack build --target web --out-dir pkg"
+  }
+}

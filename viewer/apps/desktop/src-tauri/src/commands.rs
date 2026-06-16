@@ -1,10 +1,18 @@
 use rust_dataflash_parser::LogSession;
 use serde::Serialize;
 use std::collections::HashMap;
-use tauri::State;
+use tauri::{State, AppHandle, Emitter};
 
 use crate::state::AppState;
 use rust_dataflash_parser::MessageStats;
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ParseProgress {
+    pub phase: String,
+    pub percent: f64,
+    pub message: String,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,9 +59,32 @@ pub struct FieldSeries {
 }
 
 #[tauri::command]
-pub fn open_log(path: String, state: State<'_, AppState>) -> Result<LogSummary, String> {
+pub async fn open_log(
+    path: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<LogSummary, String> {
+    let _ = app.emit("parse_progress", ParseProgress {
+        phase: "indexing".to_string(),
+        percent: 10.0,
+        message: "Opening file...".to_string(),
+    });
+
     let mut session = LogSession::open(&path).map_err(|e| e.to_string())?;
+
+    let _ = app.emit("parse_progress", ParseProgress {
+        phase: "indexing".to_string(),
+        percent: 50.0,
+        message: "Indexing log...".to_string(),
+    });
+
     session.index().map_err(|e| e.to_string())?;
+
+    let _ = app.emit("parse_progress", ParseProgress {
+        phase: "ready".to_string(),
+        percent: 100.0,
+        message: "Ready".to_string(),
+    });
 
     let file_name = std::path::Path::new(&path)
         .file_name()
@@ -67,9 +98,32 @@ pub fn open_log(path: String, state: State<'_, AppState>) -> Result<LogSummary, 
 }
 
 #[tauri::command]
-pub fn open_bytes(data: Vec<u8>, state: State<'_, AppState>) -> Result<LogSummary, String> {
+pub async fn open_bytes(
+    data: Vec<u8>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<LogSummary, String> {
+    let _ = app.emit("parse_progress", ParseProgress {
+        phase: "indexing".to_string(),
+        percent: 10.0,
+        message: "Loading bytes...".to_string(),
+    });
+
     let mut session = LogSession::from_bytes(data);
+
+    let _ = app.emit("parse_progress", ParseProgress {
+        phase: "indexing".to_string(),
+        percent: 50.0,
+        message: "Indexing log...".to_string(),
+    });
+
     session.index().map_err(|e| e.to_string())?;
+
+    let _ = app.emit("parse_progress", ParseProgress {
+        phase: "ready".to_string(),
+        percent: 100.0,
+        message: "Ready".to_string(),
+    });
 
     let summary = build_summary("uploaded.bin", &session)?;
     *state.session.lock().map_err(|e| e.to_string())? = Some(session);
@@ -128,15 +182,34 @@ pub fn list_message_types(state: State<'_, AppState>) -> Result<Vec<MessageTypeE
 }
 
 #[tauri::command]
-pub fn load_message_types(names: Vec<String>, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn load_message_types(
+    names: Vec<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
     let mut guard = state.session.lock().map_err(|e| e.to_string())?;
     let session = guard.as_mut().ok_or_else(|| "No log open".to_string())?;
 
-    for name in names {
+    let total = names.len();
+    for (i, name) in names.iter().enumerate() {
+        let percent = (i as f64 / total as f64) * 100.0;
+        let _ = app.emit("parse_progress", ParseProgress {
+            phase: "loading".to_string(),
+            percent,
+            message: format!("Loading {}...", name),
+        });
+
         session
-            .load_message_type(&name)
+            .load_message_type(name)
             .map_err(|e| e.to_string())?;
     }
+
+    let _ = app.emit("parse_progress", ParseProgress {
+        phase: "ready".to_string(),
+        percent: 100.0,
+        message: "Ready".to_string(),
+    });
+
     Ok(())
 }
 

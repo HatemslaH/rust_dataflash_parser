@@ -15,8 +15,16 @@ export function FileOpenPanel() {
       setProgress({ phase: "error", percent: 0, message: "Only .BIN dataflash logs are supported" });
       return;
     }
-    const result = await backend.openFile(file);
-    setSummary(result);
+    try {
+      const result = await backend.openFile(file);
+      setSummary(result);
+    } catch (error: any) {
+      setProgress({
+        phase: "error",
+        percent: 0,
+        message: error.message || String(error),
+      });
+    }
   };
 
   const onBrowse = () => inputRef.current?.click();

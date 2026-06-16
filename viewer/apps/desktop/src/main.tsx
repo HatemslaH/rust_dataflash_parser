@@ -1,10 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { ViewerApp, createMockParserBackend } from "@dfv/viewer";
+import { ViewerApp } from "@dfv/viewer";
+import { createDesktopParserBackend } from "./platform";
 import "@dfv/viewer/styles.css";
 
-// Phase 0: mock backend. Phase 1: swap to createDesktopParserBackend().
-const backend = createMockParserBackend("desktop");
+const backend = createDesktopParserBackend();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -10,10 +10,11 @@ export interface ViewerAppProps {
 export function ViewerApp({ backend }: ViewerAppProps) {
   const setProgress = useSessionStore((s) => s.setProgress);
 
+  if (backend) {
+    setParserBackend(backend);
+  }
+
   useEffect(() => {
-    if (backend) {
-      setParserBackend(backend);
-    }
     const active = getParserBackend();
     return active.onProgress(setProgress);
   }, [backend, setProgress]);

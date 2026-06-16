@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type {
   FieldRequest,
   FieldSeries,
@@ -13,12 +14,23 @@ import type {
 export function createDesktopParserBackend(): ParserBackend {
   const progressListeners = new Set<(progress: ParseProgress) => void>();
 
+  // Set up the Tauri event listener once
+  void listen<ParseProgress>("parse_progress", (event) => {
+    for (const listener of progressListeners) {
+      listener(event.payload);
+    }
+  });
+
   return {
     platform: "desktop",
 
     async openFile(source: File | string): Promise<LogSummary> {
       if (typeof source === "string") {
         return invoke<LogSummary>("open_log", { path: source });
+      }
+      // On desktop, the File object from drag-and-drop or file input has a 'path' property
+      if ("path" in source && typeof (source as any).path === "string" && (source as any).path) {
+        return invoke<LogSummary>("open_log", { path: (source as any).path });
       }
       const buffer = await source.arrayBuffer();
       return invoke<LogSummary>("open_bytes", { data: Array.from(new Uint8Array(buffer)) });
@@ -50,8 +62,9 @@ export function createDesktopParserBackend(): ParserBackend {
 
     onProgress(callback: (progress: ParseProgress) => void): Unsubscribe {
       progressListeners.add(callback);
-      // Phase 1: wire tauri event listener for parse_progress
-      return () => progressListeners.delete(callback);
+      return () => {
+        progressListeners.delete(callback);
+      };
     },
   };
 }
