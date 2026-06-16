@@ -38,6 +38,6 @@ pub use export::json::LogExport;
 pub use parser::DataflashParser;
 pub use session::{LogSession, Parallelism};
 pub use types::{
-    ComplexField, DEFAULT_MESSAGES, FieldArray, FmtEntry, LogMetadata, MessageStats,
+    ComplexField, DEFAULT_MESSAGES, FieldArray, FmtEntry, HEAD1, HEAD2, LogMetadata, MessageStats,
     MessageTypeInfo, ParseResult, ParseStats,
 };

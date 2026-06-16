@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use rust_dataflash_parser::types::{HEAD1, HEAD2};
+use rust_dataflash_parser::{HEAD1, HEAD2};
 
 fuzz_target!(|data: &[u8]| {
     let mut offset = 0usize;
