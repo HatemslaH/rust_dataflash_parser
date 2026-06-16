@@ -411,10 +411,13 @@ impl DataflashParser {
     }
 
     fn msg_texts_for_mode(&self) -> Option<Vec<String>> {
-        self.messages.get("MSG").and_then(|m| m.get("Message")).and_then(|arr| match arr {
-            FieldArray::Text(v) => Some(v.clone()),
-            _ => None,
-        })
+        self.messages
+            .get("MSG")
+            .and_then(|m| m.get("Message"))
+            .and_then(|arr| match arr {
+                FieldArray::Text(v) => Some(v.clone()),
+                _ => None,
+            })
     }
 
     pub(crate) fn recompute_mode_as_text(&mut self) {
