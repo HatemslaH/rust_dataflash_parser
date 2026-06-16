@@ -11,7 +11,8 @@ export interface ActivePlot {
 
 interface PlotState {
   activePlots: ActivePlot[];
-  addPlot: (plot: Omit<ActivePlot, "id" | "color" | "yAxis">) => void;
+  addPlot: (plot: Omit<ActivePlot, "id" | "color" | "yAxis"> & Partial<Pick<ActivePlot, "yAxis">>) => void;
+  setPlots: (plots: Array<Omit<ActivePlot, "id" | "color"> & Partial<Pick<ActivePlot, "yAxis">>>) => void;
   removePlot: (id: string) => void;
   clearPlots: () => void;
   togglePlotAxis: (id: string) => void;
@@ -43,8 +44,19 @@ const plotStore = createStore<PlotState>((set, get) => ({
       return;
     }
     const color = COLORS[activePlots.length % COLORS.length]!;
-    const yAxis: 1 | 2 = activePlots.length % 2 === 0 ? 1 : 2;
+    const yAxis: 1 | 2 = plot.yAxis ?? (activePlots.length % 2 === 0 ? 1 : 2);
     set({ activePlots: [...activePlots, { ...plot, id, color, yAxis }] });
+  },
+
+  setPlots: (plots) => {
+    set({
+      activePlots: plots.map((plot, index) => ({
+        ...plot,
+        id: makePlotId(plot.messageType, plot.field, plot.instance),
+        color: COLORS[index % COLORS.length]!,
+        yAxis: plot.yAxis ?? ((index % 2 === 0 ? 1 : 2) as 1 | 2),
+      })),
+    });
   },
 
   removePlot: (id) => {

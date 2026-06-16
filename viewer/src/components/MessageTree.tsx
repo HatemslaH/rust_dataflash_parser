@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   IconSearch,
   IconX,
@@ -23,10 +23,20 @@ import type { MessageTypeEntry } from "../platform/types";
 import { useSessionStore } from "../stores/sessionStore";
 import { usePlotStore } from "../stores/plotStore";
 import { usePrefetchFieldSeries } from "../hooks/useFieldSeries";
-import { TIME_FIELD } from "../lib/seriesValues";
 import { parseTypeName, plotId } from "../lib/fieldSeriesKey";
+import { loadPlotFields } from "../lib/plotFieldLoader";
+import {
+  buildPresetTree,
+  resolveAvailablePresets,
+  type AvailablePreset,
+} from "../lib/plotPresets";
+import { PresetTree } from "./PresetTree";
 
 const SYSTEM_TYPES = ["FMT", "FMTU", "MULT", "UNIT"];
+
+function compareTypes(a: MessageTypeEntry, b: MessageTypeEntry): number {
+  return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+}
 
 export function MessageTree() {
   const summary = useSessionStore((s) => s.summary);
@@ -35,19 +45,28 @@ export function MessageTree() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [hideSystem, setHideSystem] = useState(true);
   const [loadingField, setLoadingField] = useState<string | null>(null);
+  const [loadingPreset, setLoadingPreset] = useState<string | null>(null);
   const backend = getParserBackend();
   const prefetchFieldSeries = usePrefetchFieldSeries();
 
   const activePlots = usePlotStore((s) => s.activePlots);
   const addPlot = usePlotStore((s) => s.addPlot);
+  const setPlots = usePlotStore((s) => s.setPlots);
   const removePlot = usePlotStore((s) => s.removePlot);
   const clearPlots = usePlotStore((s) => s.clearPlots);
   const togglePlotAxis = usePlotStore((s) => s.togglePlotAxis);
 
   useEffect(() => {
     if (!summary) return;
-    void backend.listMessageTypes().then(setTypes);
+    void backend.listMessageTypes().then((entries) => {
+      setTypes([...entries].sort(compareTypes));
+    });
   }, [summary, backend]);
+
+  const presetTree = useMemo(() => {
+    const available = resolveAvailablePresets(types);
+    return buildPresetTree(available);
+  }, [types]);
 
   if (!summary) {
     return (
@@ -58,12 +77,19 @@ export function MessageTree() {
   }
 
   const needle = filter.trim().toLowerCase();
-  const filtered = types.filter((type) => {
-    if (hideSystem && SYSTEM_TYPES.includes(type.name)) return false;
-    if (!needle) return true;
-    if (type.name.toLowerCase().includes(needle)) return true;
-    return type.fields.some((f) => f.name.toLowerCase().includes(needle));
-  });
+  const filtered = types
+    .filter((type) => {
+      if (hideSystem && SYSTEM_TYPES.includes(type.name)) return false;
+      if (!needle) return true;
+      if (type.name.toLowerCase().includes(needle)) return true;
+      return type.fields.some((f) => f.name.toLowerCase().includes(needle));
+    })
+    .sort(compareTypes);
+
+  const refreshTypes = async () => {
+    const updatedTypes = await backend.listMessageTypes();
+    setTypes([...updatedTypes].sort(compareTypes));
+  };
 
   const onFieldClick = async (typeName: string, fieldName: string) => {
     const { baseName, instance } = parseTypeName(typeName);
@@ -73,19 +99,43 @@ export function MessageTree() {
 
     setLoadingField(fieldKey);
     try {
-      await backend.loadMessageTypes([typeName]);
-      const updatedTypes = await backend.listMessageTypes();
-      setTypes(updatedTypes);
-
-      const baseReq = { messageType: baseName, instance };
-      await Promise.all([
-        prefetchFieldSeries({ ...baseReq, field: TIME_FIELD }),
-        prefetchFieldSeries({ ...baseReq, field: fieldName }),
+      await loadPlotFields(backend, prefetchFieldSeries, [
+        { messageType: baseName, field: fieldName, instance },
       ]);
+      await refreshTypes();
     } catch (error) {
       console.error(`Failed to load ${typeName}.${fieldName}:`, error);
     } finally {
       setLoadingField(null);
+    }
+  };
+
+  const onPresetSelect = async (preset: AvailablePreset) => {
+    setLoadingPreset(preset.path);
+    try {
+      setPlots(
+        preset.fields.map((field) => ({
+          messageType: field.messageType,
+          field: field.field,
+          instance: field.instance,
+          yAxis: field.yAxis,
+        })),
+      );
+
+      await loadPlotFields(
+        backend,
+        prefetchFieldSeries,
+        preset.fields.map((field) => ({
+          messageType: field.messageType,
+          field: field.field,
+          instance: field.instance,
+        })),
+      );
+      await refreshTypes();
+    } catch (error) {
+      console.error(`Failed to load preset ${preset.path}:`, error);
+    } finally {
+      setLoadingPreset(null);
     }
   };
 
@@ -149,6 +199,12 @@ export function MessageTree() {
         </Box>
       )}
 
+      <PresetTree
+        nodes={presetTree}
+        onSelect={(preset) => void onPresetSelect(preset)}
+        loadingPreset={loadingPreset}
+      />
+
       <TextInput
         placeholder="Filter types or fields…"
         leftSection={<IconSearch size={14} />}
@@ -180,6 +236,9 @@ export function MessageTree() {
         <Stack gap={2}>
           {filtered.map((type) => {
             const isOpen = expanded[type.name] ?? false;
+            const sortedFields = [...type.fields].sort((a, b) =>
+              a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+            );
             return (
               <Box key={type.name}>
                 <UnstyledButton
@@ -205,7 +264,7 @@ export function MessageTree() {
                 </UnstyledButton>
                 {isOpen && (
                   <Stack gap={2} pl={20} ml={8} style={{ borderLeft: "1px solid var(--mantine-color-default-border)" }}>
-                    {type.fields.map((field) => {
+                    {sortedFields.map((field) => {
                       const { baseName, instance } = parseTypeName(type.name);
                       const active = isFieldPlotted(type.name, field.name);
                       const fieldKey = plotId(baseName, field.name, instance);

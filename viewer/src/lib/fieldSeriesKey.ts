@@ -25,6 +25,10 @@ export function fieldSeriesQueryKey(
   return ["fieldSeries", request.messageType, request.field, request.instance ?? null] as const;
 }
 
+export function fieldRequestCacheKey(request: FieldRequest): string {
+  return `${request.messageType}\0${request.field}\0${request.instance ?? ""}`;
+}
+
 export function plotToFieldRequest(plot: ActivePlot, field?: string): FieldRequest {
   return {
     messageType: plot.messageType,

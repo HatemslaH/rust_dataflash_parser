@@ -7,6 +7,7 @@
     "build:wasm": "wasm-pack build parser-wasm --target web --out-dir pkg",
     "dev": "vite",
     "build": "npm run build:wasm && tsc -b && vite build",
+    "extract-presets": "node scripts/extract-presets.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

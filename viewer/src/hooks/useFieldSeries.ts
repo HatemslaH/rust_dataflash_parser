@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getParserBackend } from "../platform";
 import type { FieldRequest, FieldSeries } from "../platform/types";
-import { fieldSeriesQueryKey, formatTypeName } from "../lib/fieldSeriesKey";
+import { fieldSeriesQueryKey, fieldRequestCacheKey, formatTypeName } from "../lib/fieldSeriesKey";
 import { resolveGpsSource } from "../lib/gpsSource";
 import {
   TIME_FIELD,
@@ -51,41 +51,57 @@ export interface PlotSeriesData {
 }
 
 export function usePlotSeriesData(activePlots: ActivePlot[]): PlotSeriesData[] {
+  const plotRequests = useMemo(
+    () =>
+      activePlots.map((plot) => ({
+        plot,
+        timeReq: {
+          messageType: plot.messageType,
+          field: TIME_FIELD,
+          instance: plot.instance,
+        } satisfies FieldRequest,
+        valueReq: {
+          messageType: plot.messageType,
+          field: plot.field,
+          instance: plot.instance,
+        } satisfies FieldRequest,
+      })),
+    [activePlots],
+  );
+
+  const uniqueRequests = useMemo(() => {
+    const seen = new Map<string, FieldRequest>();
+    for (const { timeReq, valueReq } of plotRequests) {
+      seen.set(fieldRequestCacheKey(timeReq), timeReq);
+      seen.set(fieldRequestCacheKey(valueReq), valueReq);
+    }
+    return [...seen.values()];
+  }, [plotRequests]);
+
   const queries = useQueries({
-    queries: activePlots.flatMap((plot) => {
-      const timeReq: FieldRequest = {
-        messageType: plot.messageType,
-        field: TIME_FIELD,
-        instance: plot.instance,
-      };
-      const valueReq: FieldRequest = {
-        messageType: plot.messageType,
-        field: plot.field,
-        instance: plot.instance,
-      };
-      return [
-        {
-          queryKey: fieldSeriesQueryKey(timeReq),
-          queryFn: () => fetchFieldSeries(timeReq),
-          enabled: true,
-        },
-        {
-          queryKey: fieldSeriesQueryKey(valueReq),
-          queryFn: () => fetchFieldSeries(valueReq),
-          enabled: true,
-        },
-      ];
-    }),
+    queries: uniqueRequests.map((request) => ({
+      queryKey: fieldSeriesQueryKey(request),
+      queryFn: () => fetchFieldSeries(request),
+      enabled: activePlots.length > 0,
+    })),
   });
+
+  const resultsByKey = useMemo(() => {
+    const map = new Map<string, (typeof queries)[number]>();
+    for (let i = 0; i < uniqueRequests.length; i++) {
+      map.set(fieldRequestCacheKey(uniqueRequests[i]!), queries[i]!);
+    }
+    return map;
+  }, [uniqueRequests, queries]);
 
   const querySignature = queries
     .map((q) => `${q.dataUpdatedAt}:${q.status}:${q.fetchStatus}`)
     .join("|");
 
   return useMemo(() => {
-    return activePlots.map((plot, i) => {
-      const timeResult = queries[i * 2];
-      const valueResult = queries[i * 2 + 1];
+    return plotRequests.map(({ plot, timeReq, valueReq }) => {
+      const timeResult = resultsByKey.get(fieldRequestCacheKey(timeReq));
+      const valueResult = resultsByKey.get(fieldRequestCacheKey(valueReq));
       const timeMs = parseTimeSeriesMs(timeResult?.data);
       const values = parseNumericSeries(valueResult?.data);
       const errors = [timeResult?.error, valueResult?.error]
@@ -101,7 +117,7 @@ export function usePlotSeriesData(activePlots: ActivePlot[]): PlotSeriesData[] {
         errorMessage: errors.length > 0 ? errors.join("; ") : null,
       };
     });
-  }, [activePlots, querySignature, queries]);
+  }, [plotRequests, querySignature, resultsByKey]);
 }
 
 export function useGpsTrajectory(enabled: boolean) {
