@@ -1,0 +1,28 @@
+[package]
+name = "rust_dataflash_parser-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.rust_dataflash_parser]
+path = ".."
+
+[[bin]]
+name = "parse_type"
+path = "fuzz_targets/parse_type.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "df_scan"
+path = "fuzz_targets/df_scan.rs"
+test = false
+doc = false
+bench = false

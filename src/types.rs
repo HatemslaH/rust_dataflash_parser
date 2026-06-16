@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
 pub const HEAD1: u8 = 163;
 pub const HEAD2: u8 = 149;
 pub const FMT_TYPE_ID: u8 = 128;
@@ -21,23 +24,30 @@ impl FieldArray {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn estimated_bytes(&self) -> usize {
         match self {
             FieldArray::Numeric(v) => v.len() * std::mem::size_of::<f64>(),
-            FieldArray::Text(v) => v.iter().map(|s| s.len() + std::mem::size_of::<String>()).sum(),
+            FieldArray::Text(v) => v
+                .iter()
+                .map(|s| s.len() + std::mem::size_of::<String>())
+                .sum(),
             FieldArray::Int16x32(v) => v.len() * 64,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComplexField {
     pub name: String,
     pub units: String,
     pub multiplier: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageTypeInfo {
     pub expressions: Vec<String>,
     pub units: Option<Vec<String>>,
@@ -87,7 +97,7 @@ impl FmtEntry {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ParseStats {
     pub message_count: usize,
     pub field_count: usize,
@@ -95,11 +105,29 @@ pub struct ParseStats {
     pub estimated_bytes: usize,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
+pub struct MessageStats {
+    pub count: usize,
+    pub msg_size: usize,
+    pub size: usize,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LogMetadata {
+    pub start_time: Option<DateTime<Utc>>,
+    pub start_time_us: Option<u64>,
+    pub file_size: usize,
+    pub message_type_count: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct ParseResult {
+    pub metadata: LogMetadata,
     pub message_types: HashMap<String, MessageTypeInfo>,
     pub messages: HashMap<String, HashMap<String, FieldArray>>,
+    pub files: HashMap<String, Vec<u8>>,
     pub stats: ParseStats,
+    pub fmt_stats: HashMap<String, MessageStats>,
 }
 
 pub const DEFAULT_MESSAGES: &[&str] = &[

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::error::{ParseError, Result};
 use crate::format::{
@@ -7,27 +8,67 @@ use crate::format::{
 };
 use crate::mode::{get_mode_string, multiplier_for_id, multiplier_table_display, unit_for_id};
 use crate::types::{
-    ComplexField, DEFAULT_MESSAGES, FMT_TYPE_ID, FieldArray, FmtEntry, HEAD1, HEAD2,
-    MessageTypeInfo, ParseResult, ParseStats,
+    ComplexField, DEFAULT_MESSAGES, FMT_TYPE_ID, FieldArray, FmtEntry, HEAD1, HEAD2, LogMetadata,
+    MessageStats, MessageTypeInfo, ParseResult, ParseStats,
 };
 
 /// Fast Rust port of JsDataflashParser (`JsDataflashParser/parser.js`).
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DataflashParser {
-    buffer: Vec<u8>,
-    fmt: Vec<Option<FmtEntry>>,
+    buffer: Arc<[u8]>,
     offset: usize,
+    fmt: Vec<Option<FmtEntry>>,
     messages: HashMap<String, HashMap<String, FieldArray>>,
     message_types: HashMap<String, MessageTypeInfo>,
     files: HashMap<String, Vec<u8>>,
+    indexed: bool,
+}
+
+impl Default for DataflashParser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DataflashParser {
     pub fn new() -> Self {
-        let mut parser = Self::default();
-        parser.fmt.resize(256, None);
+        let mut parser = Self {
+            buffer: Arc::new([]),
+            offset: 0,
+            fmt: vec![None; 256],
+            messages: HashMap::new(),
+            message_types: HashMap::new(),
+            files: HashMap::new(),
+            indexed: false,
+        };
         parser.fmt[FMT_TYPE_ID as usize] = Some(FmtEntry::default_fmt());
         parser
+    }
+
+    pub fn set_buffer(&mut self, data: Vec<u8>) {
+        self.buffer = Arc::from(data);
+        self.indexed = false;
+    }
+
+    pub fn set_buffer_arc(&mut self, data: Arc<[u8]>) {
+        self.buffer = data;
+        self.indexed = false;
+    }
+
+    pub fn buffer_arc(&self) -> Arc<[u8]> {
+        Arc::clone(&self.buffer)
+    }
+
+    pub fn messages_mut(&mut self) -> &mut HashMap<String, HashMap<String, FieldArray>> {
+        &mut self.messages
+    }
+
+    pub fn process_files_mut(&mut self) {
+        self.process_files();
+    }
+
+    pub fn buffer(&self) -> &[u8] {
+        &self.buffer
     }
 
     pub fn message_types(&self) -> &HashMap<String, MessageTypeInfo> {
@@ -40,6 +81,18 @@ impl DataflashParser {
 
     pub fn files(&self) -> &HashMap<String, Vec<u8>> {
         &self.files
+    }
+
+    pub fn is_indexed(&self) -> bool {
+        self.indexed
+    }
+
+    pub fn fmt_entries(&self) -> impl Iterator<Item = &FmtEntry> {
+        self.fmt.iter().flatten()
+    }
+
+    pub fn read_type_at(&self, offset: &mut usize, type_char: char) -> Result<ParsedField> {
+        parse_type_at(&self.buffer, offset, type_char)
     }
 
     pub fn stats(&self) -> HashMap<String, MessageStats> {
@@ -61,6 +114,10 @@ impl DataflashParser {
 
     fn get_fmt(&self, name: &str) -> Option<&FmtEntry> {
         self.fmt.iter().flatten().find(|fmt| fmt.name == name)
+    }
+
+    fn base_message_name(name: &str) -> &str {
+        name.split('[').next().unwrap_or(name)
     }
 
     fn format_to_struct(&mut self, fmt: &FmtEntry) -> Result<HashMap<String, ParsedField>> {
@@ -162,9 +219,14 @@ impl DataflashParser {
     }
 
     fn populate_units(&mut self) -> Result<()> {
-        let fmtu = self.get_instance("FMTU", None, None);
-        let Some(fmtu) = fmtu else { return Ok(()) };
-
+        let fmtu = match self.get_instance_fields("FMTU", None, None) {
+            Ok(m) => m,
+            Err(ParseError::UnknownMessageType(_)) => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        if fmtu.is_empty() {
+            return Ok(());
+        }
         let fmt_types = match fmtu.get("FmtType") {
             Some(FieldArray::Numeric(v)) => v.clone(),
             _ => return Ok(()),
@@ -220,8 +282,10 @@ impl DataflashParser {
                 .ok()?
                 .as_f64()?;
             let instance = instance_val as i64;
-            if !instances_offset_array.contains_key(&instance) {
-                instances_offset_array.insert(instance, Vec::new());
+            if let std::collections::hash_map::Entry::Vacant(e) =
+                instances_offset_array.entry(instance)
+            {
+                e.insert(Vec::new());
                 available_instances.push(instance);
             }
             instances_offset_array
@@ -266,20 +330,65 @@ impl DataflashParser {
             for (j, column) in msg.columns.iter().enumerate() {
                 let type_char = msg.format.chars().nth(j).unwrap();
                 if Some(j) == time_index {
-                    let value = parse_type_at(&self.buffer, &mut offset, type_char)?;
-                    if let Some(v) = value.as_f64() {
-                        if let Some(FieldArray::Numeric(values)) = parsed.get_mut("time_boot_ms") {
-                            values[row] = v / 1000.0;
-                        }
+                    let value =
+                        parse_type_at(&self.buffer, &mut offset, type_char).map_err(|e| {
+                            ParseError::FieldParseError {
+                                message: msg.name.clone(),
+                                field: "time_boot_ms".to_string(),
+                                offset: msg_offset,
+                                source: e.to_string(),
+                            }
+                        })?;
+                    if let Some(v) = value.as_f64()
+                        && let Some(FieldArray::Numeric(values)) = parsed.get_mut("time_boot_ms")
+                    {
+                        values[row] = v / 1000.0;
                     }
                 } else if let Some(array) = parsed.get_mut(column) {
-                    let value = parse_type_at(&self.buffer, &mut offset, type_char)?;
+                    let value =
+                        parse_type_at(&self.buffer, &mut offset, type_char).map_err(|e| {
+                            ParseError::FieldParseError {
+                                message: msg.name.clone(),
+                                field: column.clone(),
+                                offset: msg_offset,
+                                source: e.to_string(),
+                            }
+                        })?;
                     store_parsed_value(array, row, value);
                 }
             }
         }
 
         Ok(parsed)
+    }
+
+    /// Index the log: scan headers, populate units, build message type metadata. No payload parsing.
+    pub fn index(&mut self) -> Result<()> {
+        self.messages.clear();
+        self.message_types.clear();
+        self.files.clear();
+        self.offset = 0;
+
+        self.df_reader()?;
+        self.populate_units()?;
+        self.build_message_types()?;
+        self.indexed = true;
+        Ok(())
+    }
+
+    /// Parse all fields for one message type into `messages`.
+    pub fn load_message_type(&mut self, name: &str) -> Result<()> {
+        if !self.indexed {
+            return Err(ParseError::InvalidFormat(
+                "call index() before load_message_type".into(),
+            ));
+        }
+        let base = Self::base_message_name(name);
+        self.parse_at_offset(base)?;
+        if base == "FILE" {
+            self.process_files();
+        }
+        Ok(())
     }
 
     fn parse_at_offset(&mut self, name: &str) -> Result<()> {
@@ -322,38 +431,77 @@ impl DataflashParser {
         Ok(())
     }
 
-    fn get_instance(
+    /// Read one field from a message type (no instance).
+    pub fn get(&self, name: &str, field: &str) -> Result<FieldArray> {
+        let fields = self.get_instance_fields(name, None, Some(field))?;
+        fields
+            .get(field)
+            .cloned()
+            .ok_or_else(|| ParseError::UnknownField(field.to_string()))
+    }
+
+    /// Read one field from a specific instance.
+    pub fn get_instance(&self, name: &str, instance: i64, field: &str) -> Result<FieldArray> {
+        let fields = self.get_instance_fields(name, Some(instance), Some(field))?;
+        fields
+            .get(field)
+            .cloned()
+            .ok_or_else(|| ParseError::UnknownField(field.to_string()))
+    }
+
+    fn get_instance_fields(
         &self,
         name: &str,
         instance: Option<i64>,
         field: Option<&str>,
-    ) -> Option<HashMap<String, FieldArray>> {
-        let msg = self.get_fmt(name)?;
+    ) -> Result<HashMap<String, FieldArray>> {
+        let base = Self::base_message_name(name);
+        let msg = self
+            .get_fmt(base)
+            .ok_or_else(|| ParseError::UnknownMessageType(base.to_string()))?;
+
         let offsets = if let Some(inst) = instance {
-            msg.instances_offset_array.as_ref()?.get(&inst)?
+            let instances = msg
+                .instances_offset_array
+                .as_ref()
+                .ok_or(ParseError::UnknownInstance(inst))?;
+            let offsets = instances
+                .get(&inst)
+                .ok_or(ParseError::UnknownInstance(inst))?;
+            offsets.as_slice()
         } else {
-            &msg.offset_array
+            msg.offset_array.as_slice()
         };
 
         if offsets.is_empty() {
-            return None;
+            return Ok(HashMap::new());
         }
 
         if let Some(field_name) = field {
-            let field_index = msg.columns.iter().position(|c| c == field_name)?;
+            let field_index = msg
+                .columns
+                .iter()
+                .position(|c| c == field_name)
+                .ok_or_else(|| ParseError::UnknownField(field_name.to_string()))?;
             let field_offset = msg.format_offset[field_index];
-            let type_char = msg.format.chars().nth(field_index)?;
+            let type_char = msg.format.chars().nth(field_index).unwrap();
             let mut array = new_field_array(type_char, offsets.len());
             for (i, &msg_offset) in offsets.iter().enumerate() {
                 let mut offset = msg_offset + field_offset;
-                if let Ok(value) = parse_type_at(&self.buffer, &mut offset, type_char) {
-                    store_parsed_value(&mut array, i, value);
-                }
+                let value = parse_type_at(&self.buffer, &mut offset, type_char).map_err(|e| {
+                    ParseError::FieldParseError {
+                        message: msg.name.clone(),
+                        field: field_name.to_string(),
+                        offset: msg_offset,
+                        source: e.to_string(),
+                    }
+                })?;
+                store_parsed_value(&mut array, i, value);
             }
-            return Some(HashMap::from([(field_name.to_string(), array)]));
+            return Ok(HashMap::from([(field_name.to_string(), array)]));
         }
 
-        self.parse_message_fields(msg, offsets).ok()
+        self.parse_message_fields(msg, offsets)
     }
 
     fn process_files(&mut self) {
@@ -458,8 +606,10 @@ impl DataflashParser {
     }
 
     fn compute_parse_stats(&self) -> ParseStats {
-        let mut stats = ParseStats::default();
-        stats.message_count = self.messages.len();
+        let mut stats = ParseStats {
+            message_count: self.messages.len(),
+            ..ParseStats::default()
+        };
         for fields in self.messages.values() {
             stats.field_count += fields.len();
             for array in fields.values() {
@@ -470,21 +620,26 @@ impl DataflashParser {
         stats
     }
 
+    pub fn snapshot(&self, metadata: LogMetadata) -> ParseResult {
+        ParseResult {
+            metadata,
+            message_types: self.message_types.clone(),
+            messages: self.messages.clone(),
+            files: self.files.clone(),
+            stats: self.compute_parse_stats(),
+            fmt_stats: self.stats(),
+        }
+    }
+
     /// Full parse pipeline matching `DataflashParser.processData` in JS.
+    #[deprecated(note = "use LogSession")]
     pub fn process_data(
         &mut self,
         data: Vec<u8>,
         msgs: Option<Vec<String>>,
     ) -> Result<ParseResult> {
-        self.buffer = data;
-        self.offset = 0;
-        self.messages.clear();
-        self.message_types.clear();
-        self.files.clear();
-
-        self.df_reader()?;
-        let _ = self.populate_units();
-        self.build_message_types()?;
+        self.set_buffer(data);
+        self.index()?;
 
         let message_list = msgs.unwrap_or_else(|| {
             DEFAULT_MESSAGES
@@ -494,25 +649,18 @@ impl DataflashParser {
         });
 
         for msg in message_list {
-            self.parse_at_offset(&msg)?;
-            if msg == "FILE" {
-                self.process_files();
-            }
+            self.load_message_type(&msg)?;
         }
 
-        Ok(ParseResult {
-            message_types: self.message_types.clone(),
-            messages: self.messages.clone(),
-            stats: self.compute_parse_stats(),
-        })
-    }
-}
+        let metadata = LogMetadata {
+            start_time: None,
+            start_time_us: None,
+            file_size: self.buffer.len(),
+            message_type_count: self.message_types.len(),
+        };
 
-#[derive(Debug, Clone, Copy)]
-pub struct MessageStats {
-    pub count: usize,
-    pub msg_size: usize,
-    pub size: usize,
+        Ok(self.snapshot(metadata))
+    }
 }
 
 #[cfg(test)]
@@ -532,5 +680,20 @@ mod tests {
         assert_eq!(get_size_of('f'), Some(4));
         assert_eq!(get_size_of('Q'), Some(8));
         assert_eq!(get_size_of('Z'), Some(64));
+    }
+
+    #[test]
+    fn get_unknown_message_type_errors() {
+        let parser = DataflashParser::new();
+        let err = parser.get("NOPE", "TimeUS").unwrap_err();
+        assert!(matches!(err, ParseError::UnknownMessageType(_)));
+    }
+
+    #[test]
+    fn index_on_empty_buffer() {
+        let mut parser = DataflashParser::new();
+        parser.set_buffer(Vec::new());
+        parser.index().unwrap();
+        assert!(parser.is_indexed());
     }
 }

@@ -16,7 +16,21 @@ pub fn get_size_of(type_char: char) -> Option<usize> {
 pub fn is_numeric_array_type(type_char: char) -> bool {
     matches!(
         type_char,
-        'b' | 'B' | 'M' | 'h' | 'H' | 'i' | 'L' | 'I' | 'f' | 'd' | 'Q' | 'q' | 'c' | 'C' | 'E' | 'e'
+        'b' | 'B'
+            | 'M'
+            | 'h'
+            | 'H'
+            | 'i'
+            | 'L'
+            | 'I'
+            | 'f'
+            | 'd'
+            | 'Q'
+            | 'q'
+            | 'c'
+            | 'C'
+            | 'E'
+            | 'e'
     )
 }
 
@@ -45,7 +59,9 @@ fn read_i8(data: &[u8], offset: &mut usize) -> Result<i8> {
 }
 
 fn read_u16_le(data: &[u8], offset: &mut usize) -> Result<u16> {
-    let bytes = data.get(*offset..*offset + 2).ok_or(ParseError::UnexpectedEof)?;
+    let bytes = data
+        .get(*offset..*offset + 2)
+        .ok_or(ParseError::UnexpectedEof)?;
     *offset += 2;
     Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
 }
@@ -55,7 +71,9 @@ fn read_i16_le(data: &[u8], offset: &mut usize) -> Result<i16> {
 }
 
 fn read_u32_le(data: &[u8], offset: &mut usize) -> Result<u32> {
-    let bytes = data.get(*offset..*offset + 4).ok_or(ParseError::UnexpectedEof)?;
+    let bytes = data
+        .get(*offset..*offset + 4)
+        .ok_or(ParseError::UnexpectedEof)?;
     *offset += 4;
     Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
 }
@@ -69,7 +87,9 @@ fn read_f32_le(data: &[u8], offset: &mut usize) -> Result<f32> {
 }
 
 fn read_f64_le(data: &[u8], offset: &mut usize) -> Result<f64> {
-    let bytes = data.get(*offset..*offset + 8).ok_or(ParseError::UnexpectedEof)?;
+    let bytes = data
+        .get(*offset..*offset + 8)
+        .ok_or(ParseError::UnexpectedEof)?;
     *offset += 8;
     Ok(f64::from_le_bytes([
         bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
@@ -97,7 +117,9 @@ fn read_i64_as_f64(data: &[u8], offset: &mut usize) -> Result<f64> {
 }
 
 fn read_cstring(data: &[u8], offset: &mut usize, len: usize) -> Result<String> {
-    let bytes = data.get(*offset..*offset + len).ok_or(ParseError::UnexpectedEof)?;
+    let bytes = data
+        .get(*offset..*offset + len)
+        .ok_or(ParseError::UnexpectedEof)?;
     *offset += len;
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(len);
     Ok(String::from_utf8_lossy(&bytes[..end]).into_owned())
@@ -130,11 +152,7 @@ pub fn parse_type_at(data: &[u8], offset: &mut usize, type_char: char) -> Result
         'C' => ParsedValue::F64(f64::from(read_u16_le(data, offset)?) / 100.0),
         'E' => ParsedValue::F64(f64::from(read_u32_le(data, offset)?) / 100.0),
         'e' => ParsedValue::F64(f64::from(read_i32_le(data, offset)?) / 100.0),
-        other => {
-            return Err(ParseError::InvalidFormat(format!(
-                "unknown format type '{other}'"
-            )));
-        }
+        other => return Err(ParseError::InvalidFieldType(other)),
     };
     Ok(value)
 }
@@ -179,4 +197,22 @@ pub fn compute_format_offsets(format: &str) -> (Vec<usize>, usize) {
         size += get_size_of(ch).unwrap_or(0);
     }
     (format_offset, size)
+}
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn get_size_of_and_parse_never_panic(ch in prop::sample::select(vec!['b','B','h','H','i','I','f','d','Q','q','n','N','Z','c','C','E','e','M','L','a'])) {
+            let size = get_size_of(ch);
+            if let Some(sz) = size {
+                let data = vec![0u8; sz + 4];
+                let mut offset = 0usize;
+                let _ = parse_type_at(&data, &mut offset, ch);
+            }
+        }
+    }
 }
