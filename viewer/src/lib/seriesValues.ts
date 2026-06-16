@@ -43,6 +43,12 @@ export function parseTimeSeriesMs(series: FieldSeries | undefined): number[] | n
   return timeUsToBootMs(raw);
 }
 
+export function parseTextSeries(series: FieldSeries | undefined): string[] | null {
+  if (!series || series.type !== "text") return null;
+  if (!Array.isArray(series.values)) return null;
+  return series.values.map((v) => String(v ?? ""));
+}
+
 export function sampleAtTime(timeMs: number[], values: number[], targetMs: number): number | null {
   if (timeMs.length === 0 || values.length === 0) return null;
   let lo = 0;

@@ -22,8 +22,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { usePlotSeriesData } from "../hooks/useFieldSeries";
+import { useFlightModes } from "../hooks/useFlightModes";
 import { downloadCsv, exportSeriesToCsv } from "../lib/csvExport";
 import { decimateMinMax } from "../lib/decimate";
+import {
+  drawFlightModeBands,
+  drawFlightModeLabels,
+  flightModeAtTime,
+  type FlightModeSegment,
+} from "../lib/flightModes";
 import {
   computeSeriesStats,
   formatAxisFieldLabels,
@@ -45,6 +52,7 @@ interface CursorTipState {
   x: number;
   y: number;
   time: string;
+  flightMode: { mode: string; color: string } | null;
   rows: CursorTipRow[];
 }
 
@@ -185,11 +193,11 @@ function seriesLabel(label: uPlot.Series["label"]): string {
   return typeof label === "string" ? label : "";
 }
 
-function seriesColor(stroke: uPlot.Series["stroke"], fallback: string): string {
-  return typeof stroke === "string" ? stroke : fallback;
-}
-
-function readCursorTip(u: uPlot): CursorTipState | null {
+function readCursorTip(
+  u: uPlot,
+  seriesColors: string[],
+  flightModeSegments: FlightModeSegment[],
+): CursorTipState | null {
   const idx = u.cursor.idx;
   const left = u.cursor.left;
   if (idx == null || left == null) return null;
@@ -203,7 +211,7 @@ function readCursorTip(u: uPlot): CursorTipState | null {
     const series = u.series[si]!;
     rows.push({
       label: seriesLabel(series.label),
-      color: seriesColor(series.stroke, "#888"),
+      color: seriesColors[si - 1] ?? "#888",
       value: formatStatValue(v),
     });
   }
@@ -219,10 +227,14 @@ function readCursorTip(u: uPlot): CursorTipState | null {
     Math.min(u.bbox.top + (u.cursor.top ?? u.bbox.height / 2), u.bbox.top + u.bbox.height - 4),
   );
 
+  const flightMode =
+    typeof t === "number" ? flightModeAtTime(t, flightModeSegments) : null;
+
   return {
     x,
     y,
     time: typeof t === "number" ? formatDurationMs(t) : "",
+    flightMode: flightMode ? { mode: flightMode.mode, color: flightMode.color } : null,
     rows,
   };
 }
@@ -233,6 +245,7 @@ export function PlotChart() {
   const summary = useSessionStore((s) => s.summary);
   const hoveredTimeMs = useTimeStore((s) => s.hoveredTimeMs);
   const timeRange = useTimeStore((s) => s.timeRange);
+  const logDurationMs = useTimeStore((s) => s.logDurationMs);
   const setLogDurationMs = useTimeStore((s) => s.setLogDurationMs);
   const computedColorScheme = useComputedColorScheme("dark");
 
@@ -309,6 +322,16 @@ export function PlotChart() {
   const hasNumericData = seriesData.some((s) => s.timeMs && s.values);
 
   const plotSignature = activePlots.map((p) => `${p.id}:${p.color}:${p.yAxis}`).join("|");
+  const plotFieldsKey = activePlots
+    .map((p) => `${p.messageType}:${p.field}:${p.instance ?? ""}`)
+    .join("|");
+  const plotMountKey = `${summary?.fileName ?? ""}|${plotFieldsKey}`;
+
+  useEffect(() => {
+    yRangeRef.current = null;
+    setYRange(null);
+    timeStoreApi.getState().setTimeRange(null);
+  }, [plotMountKey]);
 
   useEffect(() => {
     let maxTime = 0;
@@ -326,6 +349,17 @@ export function PlotChart() {
   const chartData = useMemo(() => buildChartData(seriesData), [seriesData]);
   const hasChartData = chartData !== null;
   chartDataRef.current = chartData;
+  const seriesColorsRef = useRef<string[]>([]);
+  seriesColorsRef.current = chartData?.seriesMeta.map((s) => s.color) ?? [];
+
+  const flightModeLogEndMs = Math.max(chartData?.xMax ?? 0, logDurationMs);
+  const flightModeSegments = useFlightModes(flightModeLogEndMs, summary !== null);
+  const flightModeSegmentsRef = useRef(flightModeSegments);
+  flightModeSegmentsRef.current = flightModeSegments;
+  const flightModesDrawKey =
+    flightModeSegments.length > 0
+      ? flightModeSegments.map((s) => `${s.startMs}:${s.mode}`).join("|")
+      : "";
 
   const legendItems = useMemo(
     () =>
@@ -423,7 +457,7 @@ export function PlotChart() {
     const hasY2 = chartData.seriesMeta.some((s) => s.scale === "y2");
     const width = container.clientWidth || 600;
     const height = container.clientHeight || 280;
-    const xRange = timeRange ?? [chartData.xMin, chartData.xMax];
+    const xRange = timeStoreApi.getState().timeRange ?? [chartData.xMin, chartData.xMax];
     const currentYRange = yRangeRef.current;
 
     const opts: uPlot.Options = {
@@ -486,6 +520,11 @@ export function PlotChart() {
         points: { show: false },
       },
       hooks: {
+        drawClear: [
+          (u) => {
+            drawFlightModeBands(u, flightModeSegmentsRef.current);
+          },
+        ],
         ready: [
           (u) => {
             syncLegendLeft(u);
@@ -671,9 +710,8 @@ export function PlotChart() {
             };
           },
         ],
-        draw: [
+        setScale: [
           (u) => {
-            syncLegendLeft(u);
             const { left, top, width: w, height: h } = u.bbox;
             setPlotBbox((prev) =>
               prev.left === left && prev.top === top && prev.width === w && prev.height === h
@@ -682,11 +720,21 @@ export function PlotChart() {
             );
           },
         ],
+        drawAxes: [
+          (u) => {
+            drawFlightModeLabels(u, flightModeSegmentsRef.current);
+          },
+        ],
+        draw: [
+          (u) => {
+            syncLegendLeft(u);
+          },
+        ],
         setCursor: [
           (u) => {
             if (suppressCursorHookRef.current || zoomDragRef.current || panRef.current?.active) return;
 
-            setCursorTip(readCursorTip(u));
+            setCursorTip(readCursorTip(u, seriesColorsRef.current, flightModeSegmentsRef.current));
 
             const idx = u.cursor.idx;
             if (idx != null && u.data[0]) {
@@ -724,7 +772,7 @@ export function PlotChart() {
     };
     // chartData read for initial mount; ongoing updates use setData/setScale effects
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasChartData, plotSignature, gridColor, textColor, y1Label, y2Label, syncLegendLeft]);
+  }, [hasChartData, plotSignature, plotMountKey, gridColor, textColor, y1Label, y2Label, syncLegendLeft]);
 
   useEffect(() => {
     const plot = plotRef.current;
@@ -790,6 +838,10 @@ export function PlotChart() {
     );
     suppressCursorHookRef.current = false;
   }, [hoveredTimeMs]);
+
+  useEffect(() => {
+    plotRef.current?.redraw();
+  }, [flightModesDrawKey]);
 
   if (activePlots.length === 0) {
     return (
@@ -980,6 +1032,23 @@ export function PlotChart() {
                 <Text size="xs" fw={600} c={textColor} mb={4} ff="monospace">
                   {cursorTip.time}
                 </Text>
+                {cursorTip.flightMode && (
+                  <Group gap={6} wrap="nowrap" align="center" mb={4}>
+                    <Box
+                      w={10}
+                      h={10}
+                      style={{
+                        backgroundColor: cursorTip.flightMode.color,
+                        opacity: 0.85,
+                        flexShrink: 0,
+                        borderRadius: 2,
+                      }}
+                    />
+                    <Text size="xs" c={textColor} ff="monospace" fw={600}>
+                      {cursorTip.flightMode.mode}
+                    </Text>
+                  </Group>
+                )}
                 <Stack gap={3}>
                   {cursorTip.rows.map((row) => (
                     <Group key={row.label} gap={6} wrap="nowrap" align="center">

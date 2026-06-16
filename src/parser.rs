@@ -393,11 +393,45 @@ impl DataflashParser {
             ));
         }
         let base = Self::base_message_name(name);
+        if base == "MODE" {
+            self.ensure_msg_loaded()?;
+        }
         self.parse_at_offset(base)?;
         if base == "FILE" {
             self.process_files();
         }
         Ok(())
+    }
+
+    fn ensure_msg_loaded(&mut self) -> Result<()> {
+        if !self.messages.contains_key("MSG") {
+            self.parse_at_offset("MSG")?;
+        }
+        Ok(())
+    }
+
+    fn msg_texts_for_mode(&self) -> Option<Vec<String>> {
+        self.messages.get("MSG").and_then(|m| m.get("Message")).and_then(|arr| match arr {
+            FieldArray::Text(v) => Some(v.clone()),
+            _ => None,
+        })
+    }
+
+    pub(crate) fn recompute_mode_as_text(&mut self) {
+        let Some(mode_fields) = self.messages.get("MODE").cloned() else {
+            return;
+        };
+        let Some(FieldArray::Numeric(modes)) = mode_fields.get("Mode").cloned() else {
+            return;
+        };
+        let msg_texts = self.msg_texts_for_mode();
+        let as_text: Vec<String> = modes
+            .iter()
+            .map(|mode| get_mode_string(*mode, msg_texts.as_deref()))
+            .collect();
+        if let Some(fields) = self.messages.get_mut("MODE") {
+            fields.insert("asText".to_string(), FieldArray::Text(as_text));
+        }
     }
 
     fn parse_at_offset(&mut self, name: &str) -> Result<()> {
@@ -417,16 +451,10 @@ impl DataflashParser {
 
         let parsed = self.parse_message_fields(&msg, &msg.offset_array)?;
         if msg.name == "MODE" {
+            self.ensure_msg_loaded()?;
             let mut parsed = parsed;
             if let Some(FieldArray::Numeric(modes)) = parsed.get("Mode").cloned() {
-                let msg_texts =
-                    self.messages
-                        .get("MSG")
-                        .and_then(|m| m.get("Message"))
-                        .map(|arr| match arr {
-                            FieldArray::Text(v) => v.clone(),
-                            _ => Vec::new(),
-                        });
+                let msg_texts = self.msg_texts_for_mode();
                 let as_text: Vec<String> = modes
                     .iter()
                     .map(|mode| get_mode_string(*mode, msg_texts.as_deref()))
@@ -436,12 +464,28 @@ impl DataflashParser {
             self.messages.insert(name.to_string(), parsed);
         } else {
             self.messages.insert(name.to_string(), parsed);
+            if msg.name == "MSG" {
+                self.recompute_mode_as_text();
+            }
         }
         Ok(())
     }
 
+    fn loaded_field(&self, name: &str, field: &str) -> Option<FieldArray> {
+        let base = Self::base_message_name(name);
+        self.messages
+            .get(name)
+            .or_else(|| self.messages.get(base))
+            .and_then(|fields| fields.get(field))
+            .cloned()
+    }
+
     /// Read one field from a message type (no instance).
     pub fn get(&self, name: &str, field: &str) -> Result<FieldArray> {
+        if let Some(array) = self.loaded_field(name, field) {
+            return Ok(array);
+        }
+
         let fields = self.get_instance_fields(name, None, Some(field))?;
         fields
             .get(field)
@@ -451,6 +495,14 @@ impl DataflashParser {
 
     /// Read one field from a specific instance.
     pub fn get_instance(&self, name: &str, instance: i64, field: &str) -> Result<FieldArray> {
+        let inst_name = format!("{}[{instance}]", Self::base_message_name(name));
+        if let Some(array) = self.messages.get(&inst_name).and_then(|f| f.get(field)) {
+            return Ok(array.clone());
+        }
+        if let Some(array) = self.loaded_field(name, field) {
+            return Ok(array);
+        }
+
         let fields = self.get_instance_fields(name, Some(instance), Some(field))?;
         fields
             .get(field)

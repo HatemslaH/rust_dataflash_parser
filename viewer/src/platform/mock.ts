@@ -199,6 +199,7 @@ export function createMockParserBackend(platform: "web" | "desktop"): ParserBack
         case "ModeNum":
           return numericSeries(length, (i) => (i % 240 < 120 ? 4 : 10));
         case "Mode":
+        case "asText":
           return {
             type: "text",
             values: Array.from({ length }, (_, i) => (i % 240 < 120 ? "LOITER" : "AUTO")),
