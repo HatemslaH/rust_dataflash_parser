@@ -1,7 +1,7 @@
-import { createMockParserBackend } from "./mock";
+import { createWasmParserBackend } from "./wasm";
 import type { ParserBackend } from "./types";
 
-let backend: ParserBackend = createMockParserBackend("web");
+let backend: ParserBackend = createWasmParserBackend("web");
 
 export function getParserBackend(): ParserBackend {
   return backend;
@@ -12,4 +12,5 @@ export function setParserBackend(next: ParserBackend): void {
 }
 
 export { createMockParserBackend } from "./mock";
+export { createWasmParserBackend } from "./wasm";
 export type * from "./types";

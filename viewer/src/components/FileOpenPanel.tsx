@@ -114,7 +114,7 @@ export function FileOpenPanel({ onLogOpened }: FileOpenPanelProps) {
         onClick={() => void loadDemo()}
         fullWidth
       >
-        Load demo log (mock data)
+        Load sample log
       </Button>
 
       <Stack gap={6}>
@@ -155,13 +155,13 @@ export function FileOpenPanel({ onLogOpened }: FileOpenPanelProps) {
                 value={new Date(summary.startTime).toLocaleString()}
               />
             )}
-            <MetadataRow label="Backend" value={`mock (${backend.platform})`} />
+            <MetadataRow label="Backend" value={`rust parser (${backend.platform})`} />
           </Stack>
         </Paper>
       )}
 
       <Text size="xs" c="dimmed">
-        Dataflash Viewer — UI demo with mock parser
+        Dataflash Viewer — Rust parser in WebAssembly
       </Text>
     </Stack>
   );
