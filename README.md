@@ -17,6 +17,22 @@ This repository also includes tooling to download autotest logs, benchmark JS vs
 pip install psutil   # optional, for memory metrics in benchmark_parsers.py
 ```
 
+## Clone
+
+`JsDataflashParser` is included as a [git submodule](https://github.com/Williangalvani/JsDataflashParser):
+
+```bash
+git clone <repo-url>
+cd rust_dataflash_parser
+git submodule update --init --recursive
+```
+
+When cloning in one step:
+
+```bash
+git clone --recurse-submodules <repo-url>
+```
+
 ## Quick start
 
 ```bash
@@ -109,7 +125,7 @@ The JS harness is `benchmark_js.mjs`; it loads `JsDataflashParser/parser.js` dir
 
 ```
 rust_dataflash_parser/
-├── JsDataflashParser/       # Original JavaScript parser (reference)
+├── JsDataflashParser/       # Git submodule — original JavaScript parser
 ├── src/
 │   ├── lib.rs               # Library root
 │   ├── main.rs              # CLI binary
