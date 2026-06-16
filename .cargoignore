@@ -1,0 +1,6 @@
+/dataflash_logs/
+/fuzz/
+/benchmark_parsers.py
+/benchmark_js.mjs
+/download_dataflash_logs.py
+/JsDataflashParser/
