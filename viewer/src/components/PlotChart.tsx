@@ -69,6 +69,36 @@ interface YRangeState {
 
 const ZOOM_STEP = 1.25;
 
+/** Plot area origin/size in CSS pixels (uPlot bbox is stored in canvas pixels). */
+function plotAreaCss(u: uPlot) {
+  const px = uPlot.pxRatio;
+  return {
+    left: u.bbox.left / px,
+    top: u.bbox.top / px,
+    width: u.bbox.width / px,
+    height: u.bbox.height / px,
+  };
+}
+
+/** Pointer position on `.u-over` in CSS pixels relative to the plot area. */
+function plotPointerCss(u: uPlot, offsetX: number, offsetY: number): { x: number; y: number } {
+  const { width, height } = plotAreaCss(u);
+  return {
+    x: Math.max(0, Math.min(offsetX, width)),
+    y: Math.max(0, Math.min(offsetY, height)),
+  };
+}
+
+function plotPointerFromClient(
+  u: uPlot,
+  over: HTMLElement,
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } {
+  const rect = over.getBoundingClientRect();
+  return plotPointerCss(u, clientX - rect.left, clientY - rect.top);
+}
+
 function scaleRange([min, max]: [number, number], factor: number): [number, number] {
   const center = (min + max) / 2;
   const half = ((max - min) / 2) * factor;
@@ -218,13 +248,14 @@ function readCursorTip(
 
   const tipWidth = 168;
   const offset = 10;
-  const anchorX = u.bbox.left + left;
-  const plotRight = u.bbox.left + u.bbox.width;
+  const area = plotAreaCss(u);
+  const anchorX = area.left + left;
+  const plotRight = area.left + area.width;
   const flip = anchorX + offset + tipWidth > plotRight;
   const x = flip ? anchorX - tipWidth - offset : anchorX + offset;
   const y = Math.max(
-    u.bbox.top + 4,
-    Math.min(u.bbox.top + (u.cursor.top ?? u.bbox.height / 2), u.bbox.top + u.bbox.height - 4),
+    area.top + 4,
+    Math.min(area.top + (u.cursor.top ?? area.height / 2), area.top + area.height - 4),
   );
 
   const flightMode =
@@ -266,7 +297,7 @@ export function PlotChart() {
   const zoomDragRef = useRef<{ startX: number; startY: number } | null>(null);
   const plotCleanupRef = useRef<(() => void) | null>(null);
   const [legendLeft, setLegendLeft] = useState(58);
-  const [plotBbox, setPlotBbox] = useState({ left: 0, top: 0, width: 0, height: 0 });
+  const [plotArea, setPlotArea] = useState({ left: 0, top: 0, width: 0, height: 0 });
   const [zoomRect, setZoomRect] = useState<{
     left: number;
     top: number;
@@ -309,9 +340,18 @@ export function PlotChart() {
     };
   }, []);
 
-  const syncLegendLeft = useCallback((plot: uPlot) => {
-    const next = plot.bbox.left + 8;
-    setLegendLeft((prev) => (prev === next ? prev : next));
+  const syncPlotLayout = useCallback((plot: uPlot) => {
+    const area = plotAreaCss(plot);
+    setPlotArea((prev) =>
+      prev.left === area.left &&
+      prev.top === area.top &&
+      prev.width === area.width &&
+      prev.height === area.height
+        ? prev
+        : area,
+    );
+    const nextLegend = area.left + 8;
+    setLegendLeft((prev) => (prev === nextLegend ? prev : nextLegend));
   }, []);
 
   const isDark = computedColorScheme === "dark";
@@ -333,19 +373,12 @@ export function PlotChart() {
     .join("|");
   const plotMountKey = `${summary?.fileName ?? ""}|${plotFieldsKey}`;
 
-  // Clear y-range on plot selection change. Avoid calling setYRange inside useEffect directly when we can use a separate timeout or state trigger.
-  // Alternatively, reset state using a ref value instead of setting state synchronously inside an effect.
-  // To avoid setState warning in React 19 / eslint, we can schedule it in a microtask or simply check if yRange is already null.
+  // Reset zoom/pan when the plotted log or field set changes.
   useEffect(() => {
     yRangeRef.current = null;
-    if (yRange !== null) {
-      // Use queueMicrotask or setYRange(null) conditionally to prevent synchronous render loops
-      queueMicrotask(() => {
-        setYRange(null);
-      });
-    }
     timeStoreApi.getState().setTimeRange(null);
-  }, [plotMountKey, yRange]);
+    queueMicrotask(() => setYRange(null));
+  }, [plotMountKey]);
 
   useEffect(() => {
     let maxTime = 0;
@@ -537,6 +570,7 @@ export function PlotChart() {
           scale: s.scale,
         })),
       ],
+      select: { show: false, left: 0, top: 0, width: 0, height: 0 },
       cursor: {
         drag: { setScale: false, x: false, y: false },
         x: true,
@@ -551,36 +585,24 @@ export function PlotChart() {
         ],
         ready: [
           (u) => {
-            syncLegendLeft(u);
+            syncPlotLayout(u);
             const over = u.over;
-
-            const syncBbox = () => {
-              const { left, top, width: w, height: h } = u.bbox;
-              setPlotBbox((prev) =>
-                prev.left === left && prev.top === top && prev.width === w && prev.height === h
-                  ? prev
-                  : { left, top, width: w, height: h },
-              );
-            };
-            syncBbox();
 
             const finishZoomDrag = (e: MouseEvent) => {
               const start = zoomDragRef.current;
               if (!start) return;
 
-              const rect = over.getBoundingClientRect();
-              const offsetX = e.clientX - rect.left;
-              const offsetY = e.clientY - rect.top;
-              const left = Math.min(start.startX, offsetX);
-              const top = Math.min(start.startY, offsetY);
-              const width = Math.abs(offsetX - start.startX);
-              const height = Math.abs(offsetY - start.startY);
+              const { x: endX, y: endY } = plotPointerFromClient(u, over, e.clientX, e.clientY);
+              const left = Math.min(start.startX, endX);
+              const top = Math.min(start.startY, endY);
+              const width = Math.abs(endX - start.startX);
+              const height = Math.abs(endY - start.startY);
 
               zoomDragRef.current = null;
               setZoomRect(null);
 
               const data = chartDataRef.current;
-              if (data) {
+              if (data && width >= 3 && height >= 3) {
                 applyZoomRect(u, { left, top, width, height }, data, (range) => {
                   timeStoreApi.getState().setTimeRange(range);
                 }, setYRange);
@@ -598,29 +620,39 @@ export function PlotChart() {
               }
             });
 
-            over.addEventListener("mousedown", (e) => {
-              if (e.button !== 0) return;
+            over.addEventListener(
+              "mousedown",
+              (e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
 
-              const action = effectiveDragAction(chartToolRef.current, e.shiftKey);
+                const action = effectiveDragAction(chartToolRef.current, e.shiftKey);
 
-              if (action === "zoom") {
-                zoomDragRef.current = { startX: e.offsetX, startY: e.offsetY };
-                setZoomRect({ left: e.offsetX, top: e.offsetY, width: 0, height: 0 });
-                return;
-              }
+                if (action === "zoom") {
+                  const { x, y } = plotPointerCss(u, e.offsetX, e.offsetY);
+                  zoomDragRef.current = { startX: x, startY: y };
+                  setZoomRect({ left: x, top: y, width: 0, height: 0 });
+                  setCursorTip(null);
+                  return;
+                }
 
-              const xScale = u.scales.x;
-              if (xScale?.min == null || xScale?.max == null) return;
+                const xScale = u.scales.x;
+                if (xScale?.min == null || xScale?.max == null) return;
 
-              panRef.current = {
-                active: true,
-                startX: e.offsetX,
-                startY: e.offsetY,
-                xRange: [xScale.min, xScale.max],
-                yRange: readYRangeFromPlot(u, u.scales.y2 != null),
-              };
-              over.classList.add("u-panning");
-            });
+                const { x: plotX, y: plotY } = plotPointerCss(u, e.offsetX, e.offsetY);
+                panRef.current = {
+                  active: true,
+                  startX: plotX,
+                  startY: plotY,
+                  xRange: [xScale.min, xScale.max],
+                  yRange: readYRangeFromPlot(u, u.scales.y2 != null),
+                };
+                setCursorTip(null);
+                over.classList.add("u-panning");
+              },
+              true,
+            );
 
             const endPan = () => {
               if (!panRef.current?.active) return;
@@ -640,22 +672,28 @@ export function PlotChart() {
               if (!zoomDragRef.current) endPan();
             });
 
-            over.addEventListener("mousemove", (e) => {
-              const zoomStart = zoomDragRef.current;
-              if (zoomStart) {
-                const left = Math.min(zoomStart.startX, e.offsetX);
-                const top = Math.min(zoomStart.startY, e.offsetY);
-                const width = Math.abs(e.offsetX - zoomStart.startX);
-                const height = Math.abs(e.offsetY - zoomStart.startY);
-                setZoomRect({ left, top, width, height });
-                return;
-              }
+            over.addEventListener(
+              "mousemove",
+              (e) => {
+                const zoomStart = zoomDragRef.current;
+                if (zoomStart) {
+                  e.stopPropagation();
+                  const { x, y } = plotPointerCss(u, e.offsetX, e.offsetY);
+                  const left = Math.min(zoomStart.startX, x);
+                  const top = Math.min(zoomStart.startY, y);
+                  const width = Math.abs(x - zoomStart.startX);
+                  const height = Math.abs(y - zoomStart.startY);
+                  setZoomRect({ left, top, width, height });
+                  return;
+                }
 
-              const pan = panRef.current;
-              if (!pan?.active) return;
+                const pan = panRef.current;
+                if (!pan?.active) return;
 
-              const dx = u.posToVal(pan.startX, "x") - u.posToVal(e.offsetX, "x");
-              const dy = u.posToVal(pan.startY, "y") - u.posToVal(e.offsetY, "y");
+                e.stopPropagation();
+                const { x: plotX, y: plotY } = plotPointerCss(u, e.offsetX, e.offsetY);
+              const dx = u.posToVal(pan.startX, "x") - u.posToVal(plotX, "x");
+              const dy = u.posToVal(pan.startY, "y") - u.posToVal(plotY, "y");
 
               const xNext: [number, number] = [pan.xRange[0] + dx, pan.xRange[1] + dx];
               u.setScale("x", { min: xNext[0], max: xNext[1] });
@@ -667,12 +705,14 @@ export function PlotChart() {
                 u.setScale("y", { min: nextY.y[0], max: nextY.y[1] });
               }
               if (pan.yRange.y2) {
-                const dy2 = u.posToVal(pan.startY, "y2") - u.posToVal(e.offsetY, "y2");
+                const dy2 = u.posToVal(pan.startY, "y2") - u.posToVal(plotY, "y2");
                 nextY.y2 = [pan.yRange.y2[0] + dy2, pan.yRange.y2[1] + dy2];
                 u.setScale("y2", { min: nextY.y2[0], max: nextY.y2[1] });
               }
               if (nextY.y || nextY.y2) setYRange(nextY);
-            });
+              },
+              true,
+            );
 
             over.addEventListener(
               "wheel",
@@ -683,7 +723,8 @@ export function PlotChart() {
                 if (xScale?.min == null || xScale?.max == null) return;
 
                 const factor = e.deltaY < 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
-                const anchorX = u.posToVal(e.offsetX, "x");
+                const { x: plotX, y: plotY } = plotPointerCss(u, e.offsetX, e.offsetY);
+                const anchorX = u.posToVal(plotX, "x");
                 const xMin = anchorX - (anchorX - xScale.min) * factor;
                 const xMax = anchorX + (xScale.max - anchorX) * factor;
 
@@ -692,7 +733,7 @@ export function PlotChart() {
                 ];
 
                 if (yScale?.min != null && yScale?.max != null) {
-                  const anchorY = u.posToVal(e.offsetY, "y");
+                  const anchorY = u.posToVal(plotY, "y");
                   const yMin = anchorY - (anchorY - yScale.min) * factor;
                   const yMax = anchorY + (yScale.max - anchorY) * factor;
                   updates.push(() => u.setScale("y", { min: yMin, max: yMax }));
@@ -701,7 +742,7 @@ export function PlotChart() {
                 const y2Scale = u.scales.y2;
                 let y2Next: [number, number] | null = null;
                 if (y2Scale?.min != null && y2Scale?.max != null) {
-                  const anchorY2 = u.posToVal(e.offsetY, "y2");
+                  const anchorY2 = u.posToVal(plotY, "y2");
                   y2Next = [
                     anchorY2 - (anchorY2 - y2Scale.min) * factor,
                     anchorY2 + (y2Scale.max - anchorY2) * factor,
@@ -717,7 +758,7 @@ export function PlotChart() {
 
                 const nextY: YRangeState = {};
                 if (yScale?.min != null && yScale?.max != null) {
-                  const anchorY = u.posToVal(e.offsetY, "y");
+                  const anchorY = u.posToVal(plotY, "y");
                   nextY.y = [
                     anchorY - (anchorY - yScale.min) * factor,
                     anchorY + (yScale.max - anchorY) * factor,
@@ -736,12 +777,7 @@ export function PlotChart() {
         ],
         setScale: [
           (u) => {
-            const { left, top, width: w, height: h } = u.bbox;
-            setPlotBbox((prev) =>
-              prev.left === left && prev.top === top && prev.width === w && prev.height === h
-                ? prev
-                : { left, top, width: w, height: h },
-            );
+            syncPlotLayout(u);
           },
         ],
         drawAxes: [
@@ -749,14 +785,12 @@ export function PlotChart() {
             drawFlightModeLabels(u, flightModeSegmentsRef.current);
           },
         ],
-        draw: [
-          (u) => {
-            syncLegendLeft(u);
-          },
-        ],
         setCursor: [
           (u) => {
-            if (suppressCursorHookRef.current || zoomDragRef.current || panRef.current?.active) return;
+            if (suppressCursorHookRef.current || zoomDragRef.current || panRef.current?.active) {
+              setCursorTip(null);
+              return;
+            }
 
             setCursorTip(readCursorTip(u, seriesColorsRef.current, flightModeSegmentsRef.current));
 
@@ -781,7 +815,7 @@ export function PlotChart() {
         width: container.clientWidth,
         height: container.clientHeight,
       });
-      syncLegendLeft(plot);
+      syncPlotLayout(plot);
     });
     ro.observe(container);
 
@@ -796,7 +830,7 @@ export function PlotChart() {
     };
     // chartData read for initial mount; ongoing updates use setData/setScale effects
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasChartData, plotSignature, plotMountKey, gridColor, textColor, y1Label, y2Label, syncLegendLeft]);
+  }, [hasChartData, plotSignature, plotMountKey, gridColor, textColor, y1Label, y2Label, syncPlotLayout]);
 
   useEffect(() => {
     const plot = plotRef.current;
@@ -856,7 +890,7 @@ export function PlotChart() {
     plot.setCursor(
       {
         left: plot.valToPos(xVal, "x"),
-        top: plot.bbox.height / 2,
+        top: plot.bbox.height / uPlot.pxRatio / 2,
       },
       false,
     );
@@ -980,15 +1014,15 @@ export function PlotChart() {
               h="100%"
               className={`uplot-host uplot-host--${effectiveTool}`}
             />
-            {zoomRect && plotBbox.width > 0 && plotBbox.height > 0 && (
+            {zoomRect && plotArea.width > 0 && plotArea.height > 0 && (
               <Box className="plot-zoom-overlay" pos="absolute" inset={0} style={{ zIndex: 4, pointerEvents: "none" }}>
                 <Box
                   className="plot-zoom-shade"
                   pos="absolute"
                   style={{
-                    left: plotBbox.left,
-                    top: plotBbox.top,
-                    width: plotBbox.width,
+                    left: plotArea.left,
+                    top: plotArea.top,
+                    width: plotArea.width,
                     height: zoomRect.top,
                   }}
                 />
@@ -996,18 +1030,18 @@ export function PlotChart() {
                   className="plot-zoom-shade"
                   pos="absolute"
                   style={{
-                    left: plotBbox.left,
-                    top: plotBbox.top + zoomRect.top + zoomRect.height,
-                    width: plotBbox.width,
-                    height: Math.max(0, plotBbox.height - zoomRect.top - zoomRect.height),
+                    left: plotArea.left,
+                    top: plotArea.top + zoomRect.top + zoomRect.height,
+                    width: plotArea.width,
+                    height: Math.max(0, plotArea.height - zoomRect.top - zoomRect.height),
                   }}
                 />
                 <Box
                   className="plot-zoom-shade"
                   pos="absolute"
                   style={{
-                    left: plotBbox.left,
-                    top: plotBbox.top + zoomRect.top,
+                    left: plotArea.left,
+                    top: plotArea.top + zoomRect.top,
                     width: zoomRect.left,
                     height: zoomRect.height,
                   }}
@@ -1016,9 +1050,9 @@ export function PlotChart() {
                   className="plot-zoom-shade"
                   pos="absolute"
                   style={{
-                    left: plotBbox.left + zoomRect.left + zoomRect.width,
-                    top: plotBbox.top + zoomRect.top,
-                    width: Math.max(0, plotBbox.width - zoomRect.left - zoomRect.width),
+                    left: plotArea.left + zoomRect.left + zoomRect.width,
+                    top: plotArea.top + zoomRect.top,
+                    width: Math.max(0, plotArea.width - zoomRect.left - zoomRect.width),
                     height: zoomRect.height,
                   }}
                 />
@@ -1026,8 +1060,8 @@ export function PlotChart() {
                   className="plot-zoom-selection"
                   pos="absolute"
                   style={{
-                    left: plotBbox.left + zoomRect.left,
-                    top: plotBbox.top + zoomRect.top,
+                    left: plotArea.left + zoomRect.left,
+                    top: plotArea.top + zoomRect.top,
                     width: zoomRect.width,
                     height: zoomRect.height,
                   }}
