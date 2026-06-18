@@ -69,6 +69,16 @@ interface YRangeState {
 
 const ZOOM_STEP = 1.25;
 
+/** Mouse offset on `.u-over` → CSS pixels inside the plot area (uPlot bbox). */
+function overToPlotCoords(u: uPlot, offsetX: number, offsetY: number): { x: number; y: number } {
+  const x = offsetX - u.bbox.left;
+  const y = offsetY - u.bbox.top;
+  return {
+    x: Math.max(0, Math.min(x, u.bbox.width)),
+    y: Math.max(0, Math.min(y, u.bbox.height)),
+  };
+}
+
 function scaleRange([min, max]: [number, number], factor: number): [number, number] {
   const center = (min + max) / 2;
   const half = ((max - min) / 2) * factor;
@@ -569,12 +579,15 @@ export function PlotChart() {
               if (!start) return;
 
               const rect = over.getBoundingClientRect();
-              const offsetX = e.clientX - rect.left;
-              const offsetY = e.clientY - rect.top;
-              const left = Math.min(start.startX, offsetX);
-              const top = Math.min(start.startY, offsetY);
-              const width = Math.abs(offsetX - start.startX);
-              const height = Math.abs(offsetY - start.startY);
+              const { x: endX, y: endY } = overToPlotCoords(
+                u,
+                e.clientX - rect.left,
+                e.clientY - rect.top,
+              );
+              const left = Math.min(start.startX, endX);
+              const top = Math.min(start.startY, endY);
+              const width = Math.abs(endX - start.startX);
+              const height = Math.abs(endY - start.startY);
 
               zoomDragRef.current = null;
               setZoomRect(null);
@@ -604,21 +617,25 @@ export function PlotChart() {
               const action = effectiveDragAction(chartToolRef.current, e.shiftKey);
 
               if (action === "zoom") {
-                zoomDragRef.current = { startX: e.offsetX, startY: e.offsetY };
-                setZoomRect({ left: e.offsetX, top: e.offsetY, width: 0, height: 0 });
+                const { x, y } = overToPlotCoords(u, e.offsetX, e.offsetY);
+                zoomDragRef.current = { startX: x, startY: y };
+                setZoomRect({ left: x, top: y, width: 0, height: 0 });
+                setCursorTip(null);
                 return;
               }
 
               const xScale = u.scales.x;
               if (xScale?.min == null || xScale?.max == null) return;
 
+              const { x: plotX, y: plotY } = overToPlotCoords(u, e.offsetX, e.offsetY);
               panRef.current = {
                 active: true,
-                startX: e.offsetX,
-                startY: e.offsetY,
+                startX: plotX,
+                startY: plotY,
                 xRange: [xScale.min, xScale.max],
                 yRange: readYRangeFromPlot(u, u.scales.y2 != null),
               };
+              setCursorTip(null);
               over.classList.add("u-panning");
             });
 
@@ -643,10 +660,11 @@ export function PlotChart() {
             over.addEventListener("mousemove", (e) => {
               const zoomStart = zoomDragRef.current;
               if (zoomStart) {
-                const left = Math.min(zoomStart.startX, e.offsetX);
-                const top = Math.min(zoomStart.startY, e.offsetY);
-                const width = Math.abs(e.offsetX - zoomStart.startX);
-                const height = Math.abs(e.offsetY - zoomStart.startY);
+                const { x, y } = overToPlotCoords(u, e.offsetX, e.offsetY);
+                const left = Math.min(zoomStart.startX, x);
+                const top = Math.min(zoomStart.startY, y);
+                const width = Math.abs(x - zoomStart.startX);
+                const height = Math.abs(y - zoomStart.startY);
                 setZoomRect({ left, top, width, height });
                 return;
               }
@@ -654,8 +672,9 @@ export function PlotChart() {
               const pan = panRef.current;
               if (!pan?.active) return;
 
-              const dx = u.posToVal(pan.startX, "x") - u.posToVal(e.offsetX, "x");
-              const dy = u.posToVal(pan.startY, "y") - u.posToVal(e.offsetY, "y");
+              const { x: plotX, y: plotY } = overToPlotCoords(u, e.offsetX, e.offsetY);
+              const dx = u.posToVal(pan.startX, "x") - u.posToVal(plotX, "x");
+              const dy = u.posToVal(pan.startY, "y") - u.posToVal(plotY, "y");
 
               const xNext: [number, number] = [pan.xRange[0] + dx, pan.xRange[1] + dx];
               u.setScale("x", { min: xNext[0], max: xNext[1] });
@@ -667,7 +686,7 @@ export function PlotChart() {
                 u.setScale("y", { min: nextY.y[0], max: nextY.y[1] });
               }
               if (pan.yRange.y2) {
-                const dy2 = u.posToVal(pan.startY, "y2") - u.posToVal(e.offsetY, "y2");
+                const dy2 = u.posToVal(pan.startY, "y2") - u.posToVal(plotY, "y2");
                 nextY.y2 = [pan.yRange.y2[0] + dy2, pan.yRange.y2[1] + dy2];
                 u.setScale("y2", { min: nextY.y2[0], max: nextY.y2[1] });
               }
@@ -683,7 +702,8 @@ export function PlotChart() {
                 if (xScale?.min == null || xScale?.max == null) return;
 
                 const factor = e.deltaY < 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
-                const anchorX = u.posToVal(e.offsetX, "x");
+                const { x: plotX, y: plotY } = overToPlotCoords(u, e.offsetX, e.offsetY);
+                const anchorX = u.posToVal(plotX, "x");
                 const xMin = anchorX - (anchorX - xScale.min) * factor;
                 const xMax = anchorX + (xScale.max - anchorX) * factor;
 
@@ -692,7 +712,7 @@ export function PlotChart() {
                 ];
 
                 if (yScale?.min != null && yScale?.max != null) {
-                  const anchorY = u.posToVal(e.offsetY, "y");
+                  const anchorY = u.posToVal(plotY, "y");
                   const yMin = anchorY - (anchorY - yScale.min) * factor;
                   const yMax = anchorY + (yScale.max - anchorY) * factor;
                   updates.push(() => u.setScale("y", { min: yMin, max: yMax }));
@@ -701,7 +721,7 @@ export function PlotChart() {
                 const y2Scale = u.scales.y2;
                 let y2Next: [number, number] | null = null;
                 if (y2Scale?.min != null && y2Scale?.max != null) {
-                  const anchorY2 = u.posToVal(e.offsetY, "y2");
+                  const anchorY2 = u.posToVal(plotY, "y2");
                   y2Next = [
                     anchorY2 - (anchorY2 - y2Scale.min) * factor,
                     anchorY2 + (y2Scale.max - anchorY2) * factor,
@@ -717,7 +737,7 @@ export function PlotChart() {
 
                 const nextY: YRangeState = {};
                 if (yScale?.min != null && yScale?.max != null) {
-                  const anchorY = u.posToVal(e.offsetY, "y");
+                  const anchorY = u.posToVal(plotY, "y");
                   nextY.y = [
                     anchorY - (anchorY - yScale.min) * factor,
                     anchorY + (yScale.max - anchorY) * factor,
@@ -756,7 +776,10 @@ export function PlotChart() {
         ],
         setCursor: [
           (u) => {
-            if (suppressCursorHookRef.current || zoomDragRef.current || panRef.current?.active) return;
+            if (suppressCursorHookRef.current || zoomDragRef.current || panRef.current?.active) {
+              setCursorTip(null);
+              return;
+            }
 
             setCursorTip(readCursorTip(u, seriesColorsRef.current, flightModeSegmentsRef.current));
 
