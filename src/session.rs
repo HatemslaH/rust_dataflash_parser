@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use memmap2::Mmap;
 
-use crate::error::Result;
 #[cfg(feature = "parallel")]
 use crate::error::ParseError;
+use crate::error::Result;
 use crate::parser::DataflashParser;
 use crate::time::extract_start_time;
 use crate::types::{FieldArray, LogMetadata, ParseResult};
