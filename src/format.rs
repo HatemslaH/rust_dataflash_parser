@@ -206,6 +206,37 @@ pub fn compute_format_offsets(format: &str) -> (Vec<usize>, usize) {
 }
 
 #[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::FieldArray;
+
+    #[test]
+    fn store_parsed_value_ignores_type_mismatch() {
+        let mut array = FieldArray::Text(vec![String::from("keep")]);
+        store_parsed_value(&mut array, 0, ParsedValue::F64(42.0));
+        match &array {
+            FieldArray::Text(v) => assert_eq!(v[0], "keep"),
+            _ => panic!("expected text array"),
+        }
+    }
+
+    #[test]
+    fn compute_format_offsets_treats_unknown_char_as_zero_width() {
+        let (offsets, size) = compute_format_offsets("bXf");
+        assert_eq!(offsets, vec![0, 1, 1]);
+        assert_eq!(size, 5);
+    }
+
+    #[test]
+    fn parse_type_at_rejects_unknown_type_char() {
+        let data = [0u8; 8];
+        let mut offset = 0;
+        let err = parse_type_at(&data, &mut offset, '?').unwrap_err();
+        assert!(matches!(err, ParseError::InvalidFieldType('?')));
+    }
+}
+
+#[cfg(test)]
 mod proptests {
     use super::*;
     use proptest::prelude::*;

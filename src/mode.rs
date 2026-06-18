@@ -215,3 +215,19 @@ pub fn multiplier_table_display(mult: f64) -> &'static str {
         ""
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_mode_string_defaults_to_copter_stabilize() {
+        assert_eq!(get_mode_string(0.0, None), "STABILIZE");
+    }
+
+    #[test]
+    fn get_mode_string_uses_plane_mapping_from_msg() {
+        let msgs = vec!["ArduPlane V4.5".to_string()];
+        assert_eq!(get_mode_string(0.0, Some(&msgs)), "MANUAL");
+    }
+}
