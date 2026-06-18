@@ -56,23 +56,18 @@ fn on_demand_timeus_field_returns_raw_microseconds() {
 }
 
 #[test]
-#[should_panic]
-fn fmt_column_format_mismatch_panics_on_load() {
+fn fmt_column_format_mismatch_returns_error_on_load() {
     let mut session = LogSession::from_bytes(log_with_fmt_column_mismatch());
     session.index().expect("index");
-    let _ = session.load_message_type("TST");
+    let err = session.load_message_type("TST").unwrap_err();
+    assert!(err.to_string().contains("3 columns"));
 }
 
 #[test]
-fn unknown_format_char_indexes_but_fails_on_load() {
+fn unknown_format_char_fails_during_index() {
     let mut session = LogSession::from_bytes(log_with_unknown_format_char());
-    session.index().expect("index currently succeeds");
-    let err = session.load_message_type("TST").unwrap_err();
-    let msg = err.to_string();
-    assert!(
-        msg.contains("invalid field type") || msg.contains("invalid format"),
-        "unexpected error: {msg}"
-    );
+    let err = session.index().unwrap_err();
+    assert!(matches!(err, rust_dataflash_parser::ParseError::InvalidFieldType('X')));
 }
 
 fn field_array_f64(array: &FieldArray) -> Vec<f64> {

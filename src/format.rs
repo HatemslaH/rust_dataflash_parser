@@ -3,8 +3,10 @@
 //! Each character in a FMT format string maps to a fixed-size type. See
 //! [`parse_type_at`] for the main decode entry point.
 
+use std::collections::HashMap;
+
 use crate::error::{ParseError, Result};
-use crate::types::FieldArray;
+use crate::types::{FieldArray, FmtEntry};
 
 /// Return the payload size in bytes for a dataflash format character.
 pub fn get_size_of(type_char: char) -> Option<usize> {
@@ -186,23 +188,137 @@ impl ParsedValue {
     }
 }
 
-pub fn store_parsed_value(array: &mut FieldArray, index: usize, value: ParsedValue) {
+pub fn validate_fmt_schema(name: &str, format: &str, columns: &[String]) -> Result<Vec<char>> {
+    let format_chars: Vec<char> = format.chars().collect();
+    if columns.len() != format_chars.len() {
+        return Err(ParseError::InvalidFormat(format!(
+            "FMT {name}: {} columns but format has {} characters",
+            columns.len(),
+            format_chars.len()
+        )));
+    }
+    for &ch in &format_chars {
+        if get_size_of(ch).is_none() {
+            return Err(ParseError::InvalidFieldType(ch));
+        }
+    }
+    Ok(format_chars)
+}
+
+pub fn store_parsed_value(
+    array: &mut FieldArray,
+    index: usize,
+    value: ParsedValue,
+) -> Result<()> {
     match (array, value) {
-        (FieldArray::Numeric(values), ParsedValue::F64(v)) => values[index] = v,
-        (FieldArray::Text(values), ParsedValue::Text(v)) => values[index] = v,
-        (FieldArray::Int16x32(values), ParsedValue::I16Array(v)) => values[index] = v,
-        _ => {}
+        (FieldArray::Numeric(values), ParsedValue::F64(v)) => {
+            values[index] = v;
+            Ok(())
+        }
+        (FieldArray::Text(values), ParsedValue::Text(v)) => {
+            values[index] = v;
+            Ok(())
+        }
+        (FieldArray::Int16x32(values), ParsedValue::I16Array(v)) => {
+            values[index] = v;
+            Ok(())
+        }
+        (array, value) => Err(ParseError::InvalidFormat(format!(
+            "field value type mismatch: expected {}, got {}",
+            field_array_kind(array),
+            parsed_value_kind(&value)
+        ))),
     }
 }
 
-pub fn compute_format_offsets(format: &str) -> (Vec<usize>, usize) {
+fn field_array_kind(array: &FieldArray) -> &'static str {
+    match array {
+        FieldArray::Numeric(_) => "numeric",
+        FieldArray::Text(_) => "text",
+        FieldArray::Int16x32(_) => "int16x32",
+    }
+}
+
+fn parsed_value_kind(value: &ParsedValue) -> &'static str {
+    match value {
+        ParsedValue::F64(_) => "numeric",
+        ParsedValue::Text(_) => "text",
+        ParsedValue::I16Array(_) => "int16x32",
+    }
+}
+
+pub fn compute_format_offsets(format: &str) -> Result<(Vec<usize>, usize)> {
     let mut format_offset = Vec::with_capacity(format.len());
     let mut size = 0usize;
     for ch in format.chars() {
+        let field_size = get_size_of(ch).ok_or(ParseError::InvalidFieldType(ch))?;
         format_offset.push(size);
-        size += get_size_of(ch).unwrap_or(0);
+        size += field_size;
     }
-    (format_offset, size)
+    Ok((format_offset, size))
+}
+
+/// Decode all columns for one message type at the given file offsets.
+pub(crate) fn parse_message_fields(
+    buffer: &[u8],
+    msg: &FmtEntry,
+    offsets: &[usize],
+) -> Result<HashMap<String, FieldArray>> {
+    let format_chars = validate_fmt_schema(&msg.name, &msg.format, &msg.columns)?;
+    let len = offsets.len();
+    if len == 0 {
+        return Ok(HashMap::new());
+    }
+
+    let mut parsed: HashMap<String, FieldArray> = HashMap::new();
+    let mut time_index: Option<usize> = None;
+
+    for (i, column) in msg.columns.iter().enumerate() {
+        let type_char = format_chars[i];
+        if column == "TimeUS" {
+            time_index = Some(i);
+            parsed.insert(
+                "time_boot_ms".to_string(),
+                FieldArray::Numeric(vec![0.0; len]),
+            );
+        } else {
+            parsed.insert(column.clone(), new_field_array(type_char, len));
+        }
+    }
+
+    for (row, &msg_offset) in offsets.iter().enumerate() {
+        let mut offset = msg_offset;
+        for (j, column) in msg.columns.iter().enumerate() {
+            let type_char = format_chars[j];
+            if Some(j) == time_index {
+                let value = parse_type_at(buffer, &mut offset, type_char).map_err(|e| {
+                    ParseError::FieldParseError {
+                        message: msg.name.clone(),
+                        field: "time_boot_ms".to_string(),
+                        offset: msg_offset,
+                        source: e.to_string(),
+                    }
+                })?;
+                if let Some(v) = value.as_f64()
+                    && let Some(FieldArray::Numeric(values)) = parsed.get_mut("time_boot_ms")
+                {
+                    values[row] = v / 1000.0;
+                }
+            } else if let Some(array) = parsed.get_mut(column) {
+                let value = parse_type_at(buffer, &mut offset, type_char).map_err(|e| {
+                    ParseError::FieldParseError {
+                        message: msg.name.clone(),
+                        field: column.clone(),
+                        offset: msg_offset,
+                        source: e.to_string(),
+                    }
+                })?;
+                store_parsed_value(array, row, value)?;
+            }
+        }
+    }
+
+    Ok(parsed)
 }
 
 #[cfg(test)]
@@ -211,9 +327,10 @@ mod tests {
     use crate::types::FieldArray;
 
     #[test]
-    fn store_parsed_value_ignores_type_mismatch() {
+    fn store_parsed_value_rejects_type_mismatch() {
         let mut array = FieldArray::Text(vec![String::from("keep")]);
-        store_parsed_value(&mut array, 0, ParsedValue::F64(42.0));
+        let err = store_parsed_value(&mut array, 0, ParsedValue::F64(42.0)).unwrap_err();
+        assert!(err.to_string().contains("type mismatch"));
         match &array {
             FieldArray::Text(v) => assert_eq!(v[0], "keep"),
             _ => panic!("expected text array"),
@@ -221,10 +338,20 @@ mod tests {
     }
 
     #[test]
-    fn compute_format_offsets_treats_unknown_char_as_zero_width() {
-        let (offsets, size) = compute_format_offsets("bXf");
-        assert_eq!(offsets, vec![0, 1, 1]);
-        assert_eq!(size, 5);
+    fn compute_format_offsets_rejects_unknown_char() {
+        let err = compute_format_offsets("bXf").unwrap_err();
+        assert!(matches!(err, ParseError::InvalidFieldType('X')));
+    }
+
+    #[test]
+    fn validate_fmt_schema_rejects_column_count_mismatch() {
+        let err = validate_fmt_schema(
+            "TST",
+            "QB",
+            &["TimeUS".to_string(), "Val".to_string(), "Extra".to_string()],
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("3 columns"));
     }
 
     #[test]
