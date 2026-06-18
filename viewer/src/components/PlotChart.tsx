@@ -570,7 +570,7 @@ export function PlotChart() {
           scale: s.scale,
         })),
       ],
-      select: { show: false },
+      select: { show: false, left: 0, top: 0, width: 0, height: 0 },
       cursor: {
         drag: { setScale: false, x: false, y: false },
         x: true,

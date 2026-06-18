@@ -1,12 +1,16 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 
+#[cfg(feature = "parallel")]
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use memmap2::Mmap;
 
-use crate::error::{ParseError, Result};
+use crate::error::Result;
+#[cfg(feature = "parallel")]
+use crate::error::ParseError;
 use crate::parser::DataflashParser;
 use crate::time::extract_start_time;
 use crate::types::{FieldArray, LogMetadata, ParseResult};
