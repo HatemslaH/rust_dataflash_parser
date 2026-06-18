@@ -400,19 +400,12 @@ export function PlotChart() {
     .join("|");
   const plotMountKey = `${summary?.fileName ?? ""}|${plotFieldsKey}`;
 
-  // Clear y-range on plot selection change. Avoid calling setYRange inside useEffect directly when we can use a separate timeout or state trigger.
-  // Alternatively, reset state using a ref value instead of setting state synchronously inside an effect.
-  // To avoid setState warning in React 19 / eslint, we can schedule it in a microtask or simply check if yRange is already null.
+  // Reset zoom/pan when the plotted log or field set changes.
   useEffect(() => {
     yRangeRef.current = null;
-    if (yRange !== null) {
-      // Use queueMicrotask or setYRange(null) conditionally to prevent synchronous render loops
-      queueMicrotask(() => {
-        setYRange(null);
-      });
-    }
     timeStoreApi.getState().setTimeRange(null);
-  }, [plotMountKey, yRange]);
+    queueMicrotask(() => setYRange(null));
+  }, [plotMountKey]);
 
   useEffect(() => {
     let maxTime = 0;
