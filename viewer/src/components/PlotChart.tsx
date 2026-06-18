@@ -597,6 +597,7 @@ export function PlotChart() {
           scale: s.scale,
         })),
       ],
+      select: { show: false },
       cursor: {
         drag: { setScale: false, x: false, y: false },
         x: true,
@@ -624,15 +625,17 @@ export function PlotChart() {
               const width = Math.abs(endX - start.startX);
               const height = Math.abs(endY - start.startY);
 
+              const hadOverlay = width >= 1 || height >= 1;
               zoomDragRef.current = null;
               zoomRectRef.current = null;
-              u.redraw();
 
               const data = chartDataRef.current;
-              if (data) {
+              if (data && width >= 3 && height >= 3) {
                 applyZoomRect(u, { left, top, width, height }, data, (range) => {
                   timeStoreApi.getState().setTimeRange(range);
                 }, setYRange);
+              } else if (hadOverlay) {
+                u.redraw();
               }
             };
 
@@ -647,35 +650,39 @@ export function PlotChart() {
               }
             });
 
-            over.addEventListener("mousedown", (e) => {
-              if (e.button !== 0) return;
-              e.preventDefault();
+            over.addEventListener(
+              "mousedown",
+              (e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
 
-              const action = effectiveDragAction(chartToolRef.current, e.shiftKey);
+                const action = effectiveDragAction(chartToolRef.current, e.shiftKey);
 
-              if (action === "zoom") {
-                const { x, y } = plotPointerCss(u, e.offsetX, e.offsetY);
-                zoomDragRef.current = { startX: x, startY: y };
-                zoomRectRef.current = { left: x, top: y, width: 0, height: 0 };
+                if (action === "zoom") {
+                  const { x, y } = plotPointerCss(u, e.offsetX, e.offsetY);
+                  zoomDragRef.current = { startX: x, startY: y };
+                  zoomRectRef.current = { left: x, top: y, width: 0, height: 0 };
+                  setCursorTip(null);
+                  return;
+                }
+
+                const xScale = u.scales.x;
+                if (xScale?.min == null || xScale?.max == null) return;
+
+                const { x: plotX, y: plotY } = plotPointerCss(u, e.offsetX, e.offsetY);
+                panRef.current = {
+                  active: true,
+                  startX: plotX,
+                  startY: plotY,
+                  xRange: [xScale.min, xScale.max],
+                  yRange: readYRangeFromPlot(u, u.scales.y2 != null),
+                };
                 setCursorTip(null);
-                u.redraw();
-                return;
-              }
-
-              const xScale = u.scales.x;
-              if (xScale?.min == null || xScale?.max == null) return;
-
-              const { x: plotX, y: plotY } = plotPointerCss(u, e.offsetX, e.offsetY);
-              panRef.current = {
-                active: true,
-                startX: plotX,
-                startY: plotY,
-                xRange: [xScale.min, xScale.max],
-                yRange: readYRangeFromPlot(u, u.scales.y2 != null),
-              };
-              setCursorTip(null);
-              over.classList.add("u-panning");
-            });
+                over.classList.add("u-panning");
+              },
+              true,
+            );
 
             const endPan = () => {
               if (!panRef.current?.active) return;
@@ -793,6 +800,11 @@ export function PlotChart() {
             };
           },
         ],
+        setScale: [
+          (u) => {
+            syncLegendLeft(u);
+          },
+        ],
         drawAxes: [
           (u) => {
             drawFlightModeLabels(u, flightModeSegmentsRef.current);
@@ -800,7 +812,6 @@ export function PlotChart() {
         ],
         draw: [
           (u) => {
-            syncLegendLeft(u);
             const zr = zoomRectRef.current;
             if (zr) drawZoomOverlay(u, zr);
           },
