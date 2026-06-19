@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use crate::error::{ParseError, Result};
 use crate::format::{
-    ParsedValue as ParsedField, compute_format_offsets, new_field_array, parse_type_at,
-    store_parsed_value,
+    ParsedValue as ParsedField, compute_format_offsets, new_field_array, parse_message_fields,
+    parse_type_at, store_parsed_value, validate_fmt_schema,
 };
 use crate::mode::{get_mode_string, multiplier_for_id, multiplier_table_display, unit_for_id};
 use crate::types::{
@@ -130,10 +130,11 @@ impl DataflashParser {
     }
 
     fn format_to_struct(&mut self, fmt: &FmtEntry) -> Result<HashMap<String, ParsedField>> {
+        let format_chars = validate_fmt_schema(&fmt.name, &fmt.format, &fmt.columns)?;
         let mut dict = HashMap::new();
-        for (idx, type_char) in fmt.format.chars().enumerate() {
+        for (idx, type_char) in format_chars.iter().enumerate() {
             let column = fmt.columns[idx].clone();
-            let value = parse_type_at(&self.buffer, &mut self.offset, type_char)?;
+            let value = parse_type_at(&self.buffer, &mut self.offset, *type_char)?;
             dict.insert(column, value);
         }
         Ok(dict)
@@ -169,7 +170,7 @@ impl DataflashParser {
                         .split(',')
                         .map(str::to_string)
                         .collect();
-                    let (format_offset, size) = compute_format_offsets(&format);
+                    let (format_offset, size) = compute_format_offsets(&format)?;
                     let type_id = value
                         .get("Type")
                         .and_then(|v| v.as_f64())
@@ -279,7 +280,8 @@ impl DataflashParser {
         let units = msg.units.as_ref()?;
         let instance_index = units.iter().position(|u| u == "instance")?;
         let instance_offset = msg.format_offset[instance_index];
-        let instance_type = msg.format.chars().nth(instance_index)?;
+        let format_chars = validate_fmt_schema(&msg.name, &msg.format, &msg.columns).ok()?;
+        let instance_type = *format_chars.get(instance_index)?;
 
         let mut available_instances = Vec::new();
         let mut instances_offset_array: HashMap<i64, Vec<usize>> = HashMap::new();
@@ -299,7 +301,7 @@ impl DataflashParser {
             }
             instances_offset_array
                 .get_mut(&instance)
-                .unwrap()
+                .expect("instance bucket was just created")
                 .push(msg_offset);
         }
 
@@ -313,62 +315,7 @@ impl DataflashParser {
         msg: &FmtEntry,
         offsets: &[usize],
     ) -> Result<HashMap<String, FieldArray>> {
-        let len = offsets.len();
-        if len == 0 {
-            return Ok(HashMap::new());
-        }
-
-        let mut parsed: HashMap<String, FieldArray> = HashMap::new();
-        let mut time_index: Option<usize> = None;
-
-        for (i, column) in msg.columns.iter().enumerate() {
-            let type_char = msg.format.chars().nth(i).unwrap();
-            if column == "TimeUS" {
-                time_index = Some(i);
-                parsed.insert(
-                    "time_boot_ms".to_string(),
-                    FieldArray::Numeric(vec![0.0; len]),
-                );
-            } else {
-                parsed.insert(column.clone(), new_field_array(type_char, len));
-            }
-        }
-
-        for (row, &msg_offset) in offsets.iter().enumerate() {
-            let mut offset = msg_offset;
-            for (j, column) in msg.columns.iter().enumerate() {
-                let type_char = msg.format.chars().nth(j).unwrap();
-                if Some(j) == time_index {
-                    let value =
-                        parse_type_at(&self.buffer, &mut offset, type_char).map_err(|e| {
-                            ParseError::FieldParseError {
-                                message: msg.name.clone(),
-                                field: "time_boot_ms".to_string(),
-                                offset: msg_offset,
-                                source: e.to_string(),
-                            }
-                        })?;
-                    if let Some(v) = value.as_f64()
-                        && let Some(FieldArray::Numeric(values)) = parsed.get_mut("time_boot_ms")
-                    {
-                        values[row] = v / 1000.0;
-                    }
-                } else if let Some(array) = parsed.get_mut(column) {
-                    let value =
-                        parse_type_at(&self.buffer, &mut offset, type_char).map_err(|e| {
-                            ParseError::FieldParseError {
-                                message: msg.name.clone(),
-                                field: column.clone(),
-                                offset: msg_offset,
-                                source: e.to_string(),
-                            }
-                        })?;
-                    store_parsed_value(array, row, value);
-                }
-            }
-        }
-
-        Ok(parsed)
+        parse_message_fields(&self.buffer, msg, offsets)
     }
 
     /// Index the log: scan headers, populate units, build message type metadata. No payload parsing.
@@ -548,7 +495,8 @@ impl DataflashParser {
                 .position(|c| c == field_name)
                 .ok_or_else(|| ParseError::UnknownField(field_name.to_string()))?;
             let field_offset = msg.format_offset[field_index];
-            let type_char = msg.format.chars().nth(field_index).unwrap();
+            let format_chars = validate_fmt_schema(&msg.name, &msg.format, &msg.columns)?;
+            let type_char = format_chars[field_index];
             let mut array = new_field_array(type_char, offsets.len());
             for (i, &msg_offset) in offsets.iter().enumerate() {
                 let mut offset = msg_offset + field_offset;
@@ -560,7 +508,7 @@ impl DataflashParser {
                         source: e.to_string(),
                     }
                 })?;
-                store_parsed_value(&mut array, i, value);
+                store_parsed_value(&mut array, i, value)?;
             }
             return Ok(HashMap::from([(field_name.to_string(), array)]));
         }

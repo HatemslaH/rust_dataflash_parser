@@ -189,12 +189,13 @@ impl LogSession {
                     let mut out = Vec::new();
                     for (inst, offsets) in instances {
                         let inst_name = format!("{base}[{inst}]");
-                        let fields = parse_message_fields_standalone(&buffer, &msg, offsets)?;
+                        let fields = crate::format::parse_message_fields(&buffer, &msg, offsets)?;
                         out.push((inst_name, fields));
                     }
                     Ok(out)
                 } else {
-                    let fields = parse_message_fields_standalone(&buffer, &msg, &msg.offset_array)?;
+                    let fields =
+                        crate::format::parse_message_fields(&buffer, &msg, &msg.offset_array)?;
                     Ok(vec![(base.to_string(), fields)])
                 }
             })
@@ -242,68 +243,4 @@ impl LogSession {
     pub fn parser(&self) -> &DataflashParser {
         &self.parser
     }
-}
-
-#[cfg(feature = "parallel")]
-fn parse_message_fields_standalone(
-    buffer: &Arc<[u8]>,
-    msg: &crate::types::FmtEntry,
-    offsets: &[usize],
-) -> Result<HashMap<String, FieldArray>> {
-    use crate::format::{new_field_array, parse_type_at, store_parsed_value};
-
-    let len = offsets.len();
-    if len == 0 {
-        return Ok(HashMap::new());
-    }
-
-    let mut parsed: HashMap<String, FieldArray> = HashMap::new();
-    let mut time_index: Option<usize> = None;
-
-    for (i, column) in msg.columns.iter().enumerate() {
-        let type_char = msg.format.chars().nth(i).unwrap();
-        if column == "TimeUS" {
-            time_index = Some(i);
-            parsed.insert(
-                "time_boot_ms".to_string(),
-                FieldArray::Numeric(vec![0.0; len]),
-            );
-        } else {
-            parsed.insert(column.clone(), new_field_array(type_char, len));
-        }
-    }
-
-    for (row, &msg_offset) in offsets.iter().enumerate() {
-        let mut offset = msg_offset;
-        for (j, column) in msg.columns.iter().enumerate() {
-            let type_char = msg.format.chars().nth(j).unwrap();
-            if Some(j) == time_index {
-                let value = parse_type_at(buffer, &mut offset, type_char).map_err(|e| {
-                    ParseError::FieldParseError {
-                        message: msg.name.clone(),
-                        field: "time_boot_ms".to_string(),
-                        offset: msg_offset,
-                        source: e.to_string(),
-                    }
-                })?;
-                if let Some(v) = value.as_f64()
-                    && let Some(FieldArray::Numeric(values)) = parsed.get_mut("time_boot_ms")
-                {
-                    values[row] = v / 1000.0;
-                }
-            } else if let Some(array) = parsed.get_mut(column) {
-                let value = parse_type_at(buffer, &mut offset, type_char).map_err(|e| {
-                    ParseError::FieldParseError {
-                        message: msg.name.clone(),
-                        field: column.clone(),
-                        offset: msg_offset,
-                        source: e.to_string(),
-                    }
-                })?;
-                store_parsed_value(array, row, value);
-            }
-        }
-    }
-
-    Ok(parsed)
 }

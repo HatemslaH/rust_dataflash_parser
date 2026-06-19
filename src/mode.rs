@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 const MAV_TYPE_FIXED_WING: i32 = 1;
 const MAV_TYPE_QUADROTOR: i32 = 2;
@@ -109,13 +110,19 @@ fn mode_mapping_sub() -> HashMap<i32, &'static str> {
     ])
 }
 
-fn get_mode_map(mav_type: i32) -> Option<HashMap<i32, &'static str>> {
+static MODE_MAP_ACM: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(mode_mapping_acm);
+static MODE_MAP_APM: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(mode_mapping_apm);
+static MODE_MAP_ROVER: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(mode_mapping_rover);
+static MODE_MAP_TRACKER: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(mode_mapping_tracker);
+static MODE_MAP_SUB: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(mode_mapping_sub);
+
+fn get_mode_map(mav_type: i32) -> Option<&'static HashMap<i32, &'static str>> {
     match mav_type {
-        MAV_TYPE_FIXED_WING => Some(mode_mapping_apm()),
-        MAV_TYPE_QUADROTOR => Some(mode_mapping_acm()),
-        MAV_TYPE_GROUND_ROVER => Some(mode_mapping_rover()),
-        MAV_TYPE_ANTENNA_TRACKER => Some(mode_mapping_tracker()),
-        MAV_TYPE_SUBMARINE => Some(mode_mapping_sub()),
+        MAV_TYPE_FIXED_WING => Some(&MODE_MAP_APM),
+        MAV_TYPE_QUADROTOR => Some(&MODE_MAP_ACM),
+        MAV_TYPE_GROUND_ROVER => Some(&MODE_MAP_ROVER),
+        MAV_TYPE_ANTENNA_TRACKER => Some(&MODE_MAP_TRACKER),
+        MAV_TYPE_SUBMARINE => Some(&MODE_MAP_SUB),
         _ => None,
     }
 }
@@ -213,5 +220,21 @@ pub fn multiplier_table_display(mult: f64) -> &'static str {
         "m"
     } else {
         ""
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_mode_string_defaults_to_copter_stabilize() {
+        assert_eq!(get_mode_string(0.0, None), "STABILIZE");
+    }
+
+    #[test]
+    fn get_mode_string_uses_plane_mapping_from_msg() {
+        let msgs = vec!["ArduPlane V4.5".to_string()];
+        assert_eq!(get_mode_string(0.0, Some(&msgs)), "MANUAL");
     }
 }
