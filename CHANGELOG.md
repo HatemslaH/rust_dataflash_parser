@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-06-18
+
+### Fixed
+
+- **Parser:** validate FMT schema (column/format length, unknown format characters) during indexing instead of panicking or misaligning field reads.
+- **Parser:** return explicit errors from `store_parsed_value` on type mismatches instead of silently keeping default values.
+- **Parser:** share one `parse_message_fields` implementation for sequential and parallel loading.
+- **Parser:** cache MAV mode lookup tables with `LazyLock` to avoid per-row `HashMap` allocation.
+
+### Added
+
+- Parsing robustness tests with synthetic `.BIN` fixtures (`tests/parsing_robustness.rs`).
+
+[0.3.2]: https://github.com/HatemslaH/rust_dataflash_parser/releases/tag/v0.3.2
+
 ## [0.3.1] - 2026-06-18
 
 ### Fixed
