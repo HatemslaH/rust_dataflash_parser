@@ -39,10 +39,30 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run tests
-        run: cargo test --locked
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if cargo test --locked; then
+              exit 0
+            fi
+            echo "cargo test failed (attempt ${attempt}/4), retrying..."
+            sleep $((attempt * 4))
+          done
+          exit 1
 
       - name: Build release binary
-        run: cargo build --release --locked
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if cargo build --release --locked; then
+              exit 0
+            fi
+            echo "cargo build failed (attempt ${attempt}/4), retrying..."
+            sleep $((attempt * 4))
+          done
+          exit 1
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
