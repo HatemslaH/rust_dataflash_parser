@@ -113,8 +113,7 @@ fn mode_mapping_sub() -> HashMap<i32, &'static str> {
 static MODE_MAP_ACM: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(mode_mapping_acm);
 static MODE_MAP_APM: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(mode_mapping_apm);
 static MODE_MAP_ROVER: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(mode_mapping_rover);
-static MODE_MAP_TRACKER: LazyLock<HashMap<i32, &'static str>> =
-    LazyLock::new(mode_mapping_tracker);
+static MODE_MAP_TRACKER: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(mode_mapping_tracker);
 static MODE_MAP_SUB: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(mode_mapping_sub);
 
 fn get_mode_map(mav_type: i32) -> Option<&'static HashMap<i32, &'static str>> {

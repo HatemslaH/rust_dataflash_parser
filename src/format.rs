@@ -205,11 +205,7 @@ pub fn validate_fmt_schema(name: &str, format: &str, columns: &[String]) -> Resu
     Ok(format_chars)
 }
 
-pub fn store_parsed_value(
-    array: &mut FieldArray,
-    index: usize,
-    value: ParsedValue,
-) -> Result<()> {
+pub fn store_parsed_value(array: &mut FieldArray, index: usize, value: ParsedValue) -> Result<()> {
     match (array, value) {
         (FieldArray::Numeric(values), ParsedValue::F64(v)) => {
             values[index] = v;
